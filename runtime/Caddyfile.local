@@ -1,0 +1,4 @@
+# HTTP only for loopback contract tests; customer hosting requires HTTPS.
+:8080 {
+	reverse_proxy gateway:4000
+}

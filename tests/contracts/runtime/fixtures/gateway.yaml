@@ -1,0 +1,31 @@
+# TEST FIXTURE ONLY: mocked completions, synthetic keys, no paid provider.
+model_list:
+  - model_name: local-fixture-a
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: fixture-unused
+      api_base: http://127.0.0.1:9/v1
+      mock_response: fixture A
+    model_info:
+      id: local-fixture-a
+      mode: chat
+  - model_name: local-fixture-b
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: fixture-unused
+      api_base: http://127.0.0.1:9/v1
+      mock_response: fixture B
+    model_info:
+      id: local-fixture-b
+      mode: chat
+
+router_settings:
+  num_retries: 0
+  timeout: 10
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  background_health_checks: false
+  disable_env_credential_login: true
+  # This network lookup is disabled only for isolated contract tests.
+  password_policy_check_breached_passwords: false

@@ -1,0 +1,73 @@
+# Local contract-verification profile. No OCI deployment or live model access.
+services:
+  edge:
+    image: ${GATEWAY_TEST_CADDY_REGISTRY:-docker.io/library}/caddy@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    volumes:
+      - type: bind
+        source: ./runtime/Caddyfile.local
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:0:8080"
+    networks: [default, frontend]
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  gateway:
+    image: ghcr.io/berriai/litellm@sha256:625981c83410a3ea68eb0697590a57ec1d764d634514d54fa5db0591077ee839
+    command: ["--config=/app/config.yaml", "--port=4000"]
+    env_file:
+      - ${GATEWAY_ENV_FILE:?Provide a protected gateway environment file}
+    environment:
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    volumes:
+      - type: bind
+        source: ${GATEWAY_CONFIG_FILE:?Provide an explicit gateway configuration}
+        target: /app/config.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=5)"
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 30s
+
+  database:
+    image: ${GATEWAY_TEST_POSTGRES_REGISTRY:-docker.io/library}/postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    secrets:
+      - database_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gateway", "-d", "gateway"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+secrets:
+  database_password:
+    file: ${DATABASE_PASSWORD_FILE:?Provide a protected database password file}
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    internal: true
+  frontend:
