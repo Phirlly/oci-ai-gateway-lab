@@ -18,7 +18,7 @@ class VaultRequestContracts(unittest.TestCase):
             output = "3.94.0" if "--version" in command else '{"data":[]}'
             return subprocess.CompletedProcess(command, 0, output, "")
 
-        mocked = patch("deployment.vault_cli.subprocess.run", side_effect=capture)
+        mocked = patch("deployment.oci_cli.subprocess.run", side_effect=capture)
         mocked.start()
         self.addCleanup(mocked.stop)
         self.client = VaultCLI("us-ashburn-1")

@@ -50,9 +50,11 @@ class SecretDelivery:
             raise DeliveryError("Stack and durable model-key binding conflict; recovery is required.")
         return result
 
-    def stage(self, record):
+    def stage(self, record, *, fresh_intent=False):
         # Validate again at the boundary; callers cannot forge the dataclass.
         record = parse_record(record.content, dict(self.target.identity))
+        if fresh_intent and record.kind != "creation-intent":
+            raise DeliveryError("Only a creation intent may request a fresh claim.")
         snapshot = self._current()
         if snapshot.version.record:
             return _receipt(snapshot.version, "CURRENT")
@@ -62,6 +64,8 @@ class SecretDelivery:
             if version.record.operation_id != record.operation_id:
                 raise DeliveryError("Another pending credential operation requires recovery.")
             if version.name == record.version_name:
+                if fresh_intent:
+                    raise DeliveryError("Creation intent already exists; explicit recovery is required.")
                 if version.record.content != record.content:
                     raise DeliveryError("Named pending content conflicts with this request.")
                 return _receipt(version)
@@ -76,6 +80,8 @@ class SecretDelivery:
                 self.target.secret_id, record.version_name, record.content, snapshot.etag
             )
         except MutationUncertain:
+            if fresh_intent:
+                raise DeliveryError("Intent upload is uncertain; no key may be created.") from None
             # At most one mutation. Exact readback may prove that it committed.
             pass
         version = read_version(

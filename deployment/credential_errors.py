@@ -5,7 +5,11 @@ class DeliveryError(RuntimeError):
     """Stop delivery and retain the existing records for reconciliation."""
 
 
-class VaultReadError(DeliveryError):
+class CloudReadError(DeliveryError):
+    """A cloud read could not be verified."""
+
+
+class VaultReadError(CloudReadError):
     """A Vault read could not be verified."""
 
 
