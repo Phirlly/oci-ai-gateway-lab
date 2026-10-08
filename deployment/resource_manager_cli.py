@@ -19,6 +19,11 @@ class ResourceManagerCLI(OCICommand):
     def get_job(self, job_id):
         return self.request(("resource-manager", "job", "get"), {"jobId": job_id})
 
+    def list_job_resources(self, job_id, compartment_id):
+        return self.request(("resource-manager", "associated-resource-summary",
+                             "list-job-associated-resources", "--all"),
+                            {"jobId": job_id, "compartmentId": compartment_id})
+
     def create_stack(self, payload):
         return self.request(("resource-manager", "stack", "create"), payload, mutation=True)
 
