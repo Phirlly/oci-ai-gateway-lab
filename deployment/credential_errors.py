@@ -14,4 +14,4 @@ class VaultReadError(CloudReadError):
 
 
 class MutationUncertain(DeliveryError):
-    """The request may have changed Vault; reconcile before another mutation."""
+    """The request may have changed remote state; reconcile before another mutation."""
