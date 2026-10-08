@@ -6,6 +6,7 @@ from .resource_manager_jobs import ACTIVE_STATES
 from .resource_manager_stacks import find_stack
 from .submission_records import apply_request_hash
 from .submission_recovery import reconcile_jobs, submission_scope, verified_job, verified_stack
+from .submission_upload import upload_inputs
 
 
 def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
@@ -13,6 +14,8 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
     scope = submission_scope(client, journal, target, package)
     variables = target.config.orm_variables(model_key_ocid=model_key_ocid)
     intents = journal.read(scope)
+    if any(intent.kind == 'destroy' for intent in intents):
+        raise DeliveryError('Destroy is recorded; this deployment cannot submit another Apply.')
     if (not valid_ocid(stack_id, 'ormstack')
             or find_stack(client.list_stacks(target.compartment_id), target) != stack_id):
         raise DeliveryError('Expected stack was not observed; no Apply is authorized.')
@@ -48,21 +51,7 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
     def submit(intent):
         tags = {**response['data']['freeform-tags'], **target.tags,
                 'request_hash': request_hash, 'package_hash': package.digest}
-        with package.path() as path:
-            client.update_stack({
-                'stackId': stack_id, 'ifMatch': stack.etag, 'configSource': str(path),
-                'workingDirectory': 'foundation', 'terraformVersion': '1.5.x',
-                'variables': variables, 'freeformTags': tags,
-            })
-        updated_response = client.get_stack(stack_id)
-        updated = verified_stack(updated_response, target, stack_id, intents)
-        if (updated.state != 'ACTIVE' or updated.etag == stack.etag
-                or updated_response['data']['variables'] != variables
-                or updated_response['data']['freeform-tags'] != tags):
-            raise DeliveryError('Updated stack was not confirmed; recover before submission.')
-        rechecked = reconcile_jobs(client, target, stack_id, intents)
-        if any(job.state in ACTIVE_STATES for job in rechecked.values()):
-            raise DeliveryError('Active job appeared before Apply submission.')
+        upload_inputs(client, target, package, stack, intents, variables, tags)
         created = client.create_apply({
             'stackId': stack_id, 'executionPlanStrategy': 'AUTO_APPROVED',
             'jobOperationDetailsIsProviderUpgradeRequired': False,

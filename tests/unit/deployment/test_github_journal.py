@@ -32,6 +32,13 @@ class GitHubJournalTests(unittest.TestCase):
             self.journal.submit(*self.args, lambda intent: self.fail('duplicate submission'))
         self.assertEqual(sum(c[0] == 'POST' for c in self.api.calls), 1)
 
+    def test_destroy_record_blocks_a_second_different_destroy_request(self):
+        self.journal.submit('d' * 64, 'destroy', 'b' * 64, 'e' * 64, lambda intent: None)
+        with self.assertRaises(DeliveryError):
+            self.journal.submit('d' * 64, 'destroy', 'c' * 64, 'f' * 64,
+                                lambda intent: self.fail('second destroy'))
+        self.assertEqual(sum(c[0] == 'POST' for c in self.api.calls), 1)
+
     def test_uncertain_write_is_recoverable_but_never_fresh(self):
         self.api.lose_create_reply = True
         with self.assertRaises(MutationUncertain):
