@@ -2,9 +2,56 @@
 
 A reusable OCI-hosted demonstration of access to OCI-managed and external AI models.
 
-**Status: local runtime verification.** The OCI deployment package is not built
-yet. The local profile verifies pinned LiteLLM/PostgreSQL API contracts through Caddy using
-synthetic accounts and mocked completions; it does not call real models.
+**Status: local runtime contracts and Terraform foundation.** Full OCI deployment
+is still being implemented. The local profile verifies pinned
+LiteLLM/PostgreSQL/Caddy using synthetic accounts and mocked completions.
+
+## Terraform Foundation
+
+The single [infra/](infra/) root currently defines a Vault, AES-256 encryption
+key, placeholder runtime secret and conditional model-access policy. IAM uses
+the discovered tenancy home region; hosting uses the configured region.
+
+[deployment.tfvars.json.example](deployment.tfvars.json.example) contains the
+nonsecret settings implemented so far. Copy it to the ignored
+`deployment.tfvars.json` and replace its placeholders:
+
+| Setting | Value |
+| --- | --- |
+| `tenancy_ocid` | Existing OC1 tenancy |
+| `compartment_ocid` | Existing deployment compartment |
+| `region` | Subscribed hosting region; example uses Ashburn |
+| `deployment_id` | Stable name unique within the tenancy |
+| `oci_model_id` | Exact OCI model identifier, verified for the inference region |
+
+Credentials and profile names do not belong in this file. Resource Manager
+supplies Terraform authentication; local provider configuration can select
+`OCI_CONFIG_FILE_PROFILE` or use the default profile. The generated model-key
+OCID is a workflow-derived input, recovered before each resumed Apply.
+
+Terraform creates only `UNCONFIGURED` secret content. The planned deployment
+workflow delivers credentials separately and supplies the exact key binding
+before inference access is granted. The existing deployment identity needs
+region-subscription read access and authority over Vaults, keys, secrets and
+compartment policies. The stack cannot grant its own deployment permissions.
+
+Verify this foundation with Terraform **1.16.4**; no OCI credentials are needed:
+
+```sh
+terraform -chdir=infra init -backend=false -input=false -lockfile=readonly
+terraform -chdir=infra fmt -check -recursive
+terraform -chdir=infra validate
+terraform -chdir=infra test
+```
+
+Tests are separated into inputs, regions, secrets and identity under
+`infra/tests/`. All runs use mocked providers and plan operations. Deployment
+files also pass initialization and validation with Terraform **1.5.7**, the
+documented Resource Manager CLI version; modern mock tests run separately.
+
+VM/network resources, credential delivery, GitHub deployment, sample automation
+and cloud cleanup are not implemented yet. These checks do not prove a live
+deployment, effective permissions or preservation of secret versions on reapply.
 
 ## Run the Local Contracts
 
@@ -97,7 +144,7 @@ container engine running.
 - Session model access, mocked responses and complete streaming.
 - Account persistence across gateway restart.
 
-Browser interaction, real OCI/external models, automated cloud setup, HTTPS and
+Real OCI/external models, automated cloud setup, public HTTPS/browser access and
 cloud cleanup still require implementation and validation. The local Compose
 profile and mocked test configuration are for verification, not customer hosting.
 
