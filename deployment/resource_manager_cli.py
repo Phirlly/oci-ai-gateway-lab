@@ -33,5 +33,8 @@ class ResourceManagerCLI(OCICommand):
     def create_apply(self, payload):
         return self.request(("resource-manager", "job", "create-apply-job"), payload, mutation=True)
 
+    def create_destroy(self, payload):
+        return self.request(("resource-manager", "job", "create-destroy-job"), payload, mutation=True)
+
     def get_job_package(self, job_id):
         return download_job_package(self, job_id)

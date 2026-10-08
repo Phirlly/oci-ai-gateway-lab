@@ -4,7 +4,7 @@ from .credential_errors import DeliveryError
 from .foundation_package import FoundationPackage
 from .resource_manager_jobs import active_job_id, parse_job
 from .resource_manager_stacks import parse_stack
-from .submission_records import apply_request_hash, digest, target_identity
+from .submission_records import apply_request_hash, destroy_request_hash, digest, target_identity
 
 
 def submission_scope(client, journal, target, package):
@@ -43,19 +43,22 @@ def verified_stack(response, target, stack_id, intents):
 
 
 def verified_job(client, target, stack_id, job_id, intent):
+    if intent.kind not in ('apply', 'destroy'):
+        raise DeliveryError('Recorded operation is not a supported infrastructure job.')
     response = client.get_job(job_id)
     job = parse_job(response, target, stack_id, job_id)
     data = response['data']
     source = data.get('config-source')
     tags = data['freeform-tags']
-    if (job.operation != 'APPLY' or job.operation_id != intent.operation_id
+    request_hash = apply_request_hash if intent.kind == 'apply' else destroy_request_hash
+    if (job.operation != intent.kind.upper() or job.operation_id != intent.operation_id
             or tags.get('request_hash') != intent.request_hash
             or tags.get('package_hash') != intent.package_hash
             or not isinstance(source, dict) or source.get('config-source-record-type') != 'ZIP_UPLOAD'
             or data.get('working-directory') != 'foundation'
             or data.get('is-provider-upgrade-required') is not False
             or type(data.get('is-third-party-provider-experience-enabled')) not in (bool, type(None))
-            or apply_request_hash(stack_id, data['variables'], intent.package_hash) != intent.request_hash):
+            or request_hash(stack_id, data['variables'], intent.package_hash) != intent.request_hash):
         raise DeliveryError('Job inputs conflict with the recorded submission.')
     return job
 
@@ -63,7 +66,7 @@ def verified_job(client, target, stack_id, job_id, intent):
 def reconcile_jobs(client, target, stack_id, intents):
     response = client.list_jobs(target.compartment_id, stack_id)
     active = active_job_id(response, target, stack_id)
-    records = {intent.operation_id: intent for intent in intents if intent.kind == 'apply'}
+    records = {intent.operation_id: intent for intent in intents if intent.kind in ('apply', 'destroy')}
     candidates = {}
     for row in response['data']:
         tags = row.get('freeform-tags') or {}

@@ -70,7 +70,8 @@ class GitHubJournal:
     def submit(self, target_hash, kind, request_hash, package_hash, callback):
         """Never replay a callback for an existing or uncertain persisted intent."""
         prior = self.read(target_hash)
-        if any(i.kind == kind and (kind == 'create-stack' or i.request_hash == request_hash) for i in prior):
+        if any(i.kind == kind and (kind in ('create-stack', 'destroy') or i.request_hash == request_hash)
+               for i in prior):
             raise DeliveryError('Submission is already recorded; recover it before proceeding.')
         intent = Intent(self.controller_id, target_hash, kind, uuid.uuid4().hex, request_hash, package_hash)
         data, _ = self.api.request('POST', self.path + '/deployments', {

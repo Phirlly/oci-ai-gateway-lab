@@ -36,7 +36,7 @@ class Intent:
     package_hash: str
 
     def __post_init__(self):
-        if self.kind not in ('create-stack', 'apply'):
+        if self.kind not in ('create-stack', 'apply', 'destroy'):
             raise DeliveryError('Unsupported submission operation.')
         for name, value in asdict(self).items():
             if name == 'kind':
@@ -62,3 +62,8 @@ class Intent:
 
 def apply_request_hash(stack_id, variables, package_hash):
     return digest({'stack_id': stack_id, 'variables': variables, 'package_hash': package_hash})
+
+
+def destroy_request_hash(stack_id, variables, package_hash):
+    return digest({'operation': 'DESTROY', 'stack_id': stack_id,
+                   'variables': variables, 'package_hash': package_hash})
