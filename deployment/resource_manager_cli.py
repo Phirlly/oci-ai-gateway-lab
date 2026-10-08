@@ -1,6 +1,7 @@
-"""Fixed Resource Manager reads; infrastructure mutations are not exposed here."""
+"""Fixed Resource Manager reads and journal-controlled submission commands."""
 
 from .oci_cli import OCICommand
+from .resource_manager_download import download_job_package
 
 
 class ResourceManagerCLI(OCICommand):
@@ -17,3 +18,15 @@ class ResourceManagerCLI(OCICommand):
 
     def get_job(self, job_id):
         return self.request(("resource-manager", "job", "get"), {"jobId": job_id})
+
+    def create_stack(self, payload):
+        return self.request(("resource-manager", "stack", "create"), payload, mutation=True)
+
+    def update_stack(self, payload):
+        return self.request(("resource-manager", "stack", "update", "--force"), payload, mutation=True)
+
+    def create_apply(self, payload):
+        return self.request(("resource-manager", "job", "create-apply-job"), payload, mutation=True)
+
+    def get_job_package(self, job_id):
+        return download_job_package(self, job_id)
