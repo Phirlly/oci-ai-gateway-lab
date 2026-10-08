@@ -57,7 +57,9 @@ class OCICommand:
         except (OSError, UnicodeError, subprocess.TimeoutExpired):
             raise error("OCI operation could not be verified; reconcile before retry.") from None
 
-    def request(self, command, payload, *, mutation=False):
+    def request(self, command, payload, *, mutation=False, empty_list=False):
+        if empty_list and mutation:
+            raise DeliveryError("Empty-list handling is restricted to read operations.")
         output = self._execute(
             self.command + list(command) + [
                 "--from-json", "file:///dev/stdin",
@@ -66,7 +68,17 @@ class OCICommand:
             mutation=mutation,
         )
         try:
+            if empty_list and not output.strip():
+                return {"data": []}
             result = json.loads(output)
+            if empty_list:
+                if (isinstance(result, dict) and set(result) == {"opc-total-items"}
+                        and type(result["opc-total-items"]) in (str, int)
+                        and str(result["opc-total-items"]) == "0"):
+                    return {"data": []}
+                if (not isinstance(result, dict) or not isinstance(result.get("data"), list)
+                        or "opc-next-page" in result or "opc-next-cursor" in result):
+                    raise ValueError("Incomplete list response")
             if not isinstance(result, dict) or "data" not in result:
                 raise ValueError("Response shape")
             return result

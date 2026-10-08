@@ -11,7 +11,11 @@ if "--version" in sys.argv:
     raise SystemExit(0)
 
 request = json.load(sys.stdin)
-if mode == "timeout":
+if mode == "empty-list":
+    raise SystemExit(0)
+elif mode == "zero-total":
+    print('{"opc-total-items": "0"}')
+elif mode == "timeout":
     print("secret-sentinel", flush=True)
     print("secret-sentinel", file=sys.stderr, flush=True)
     time.sleep(5)

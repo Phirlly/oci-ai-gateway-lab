@@ -86,6 +86,28 @@ and CLI transport have separate suites. Live key creation, Vault delivery and
 the complete deployment workflow remain unverified. No deployment command is
 exposed yet.
 
+## Resource Manager Inspection Component
+
+The deployment component validates the five implemented foundation settings and
+reads owned Resource Manager stacks and jobs. It preserves the existing model-key
+binding, rejects conflicting ownership and keeps job-captured inputs separate from
+current stack settings. Infrastructure observations report the demo as
+`NOT_VERIFIED`; a successful Apply does not establish working login or models.
+
+These are tested components, not an exposed Status command or GitHub workflow.
+Stack submission, interrupted-submission recovery and full deployment remain
+unimplemented. No live OCI inspection has been performed for this component.
+
+Focused checks:
+
+```sh
+python3.12 -m unittest tests.unit.deployment.test_deployment_config -v
+python3.12 -m unittest tests.unit.deployment.test_resource_manager_stacks -v
+python3.12 -m unittest tests.unit.deployment.test_resource_manager_jobs -v
+python3.12 -m unittest tests.unit.deployment.test_deployment_status -v
+python3.12 -m unittest discover -s tests/contracts/deployment -t . -v
+```
+
 ## Run the Local Contracts
 
 Prerequisites: Linux or macOS, Python 3.12, Docker CLI with Compose, and a running
