@@ -43,7 +43,7 @@ def _unique_object(pairs):
     return result
 
 
-def _intent_request(identity, operation, expiry):
+def intent_request(identity, operation, expiry):
     return {
         "compartmentId": identity["compartment_ocid"],
         "displayName": identity["deployment_id"] + "-model",
@@ -57,7 +57,7 @@ def _intent_request(identity, operation, expiry):
     }
 
 
-def _valid_secret(value):
+def valid_secret(value):
     return (
         isinstance(value, str) and 0 < len(value) <= 8192
         and not any(ord(character) < 32 or ord(character) == 127 for character in value)
@@ -90,7 +90,7 @@ def parse_record(content, identity):
                 raise ValueError("Intent fields")
             if value["retry_policy"] != "no-automatic-retry":
                 raise ValueError("Retry policy")
-            if value["request"] != _intent_request(identity, operation, expiry):
+            if value["request"] != intent_request(identity, operation, expiry):
                 raise ValueError("Intent request")
         elif kind == "runtime-bundle":
             if set(value) != BASE_FIELDS | {"model_key_ocid", "credentials"}:
@@ -101,7 +101,7 @@ def parse_record(content, identity):
                 raise ValueError("Key identity")
             if not isinstance(credentials, dict) or set(credentials) != SECRET_FIELDS:
                 raise ValueError("Credentials")
-            if not all(_valid_secret(secret) for secret in credentials.values()):
+            if not all(valid_secret(secret) for secret in credentials.values()):
                 raise ValueError("Credentials")
         else:
             raise ValueError("Record type")

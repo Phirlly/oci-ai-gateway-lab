@@ -2,7 +2,7 @@
 
 A reusable OCI-hosted demonstration of access to OCI-managed and external AI models.
 
-**Status: runtime contracts, Terraform foundation and credential-delivery components.** Full OCI deployment
+**Status: runtime contracts, Terraform foundation and credential-lifecycle components.** Full OCI deployment
 is still being implemented. The local profile verifies pinned
 LiteLLM/PostgreSQL/Caddy using synthetic accounts and mocked completions.
 
@@ -49,17 +49,24 @@ Tests are separated into inputs, regions, secrets and identity under
 files also pass initialization and validation with Terraform **1.5.7**, the
 documented Resource Manager CLI version; modern mock tests run separately.
 
-VM/network resources, model-key provisioning, GitHub deployment, sample automation
+VM/network resources, Resource Manager orchestration, GitHub deployment, sample automation
 and cloud cleanup are not implemented yet. These checks do not prove a live
 deployment, effective permissions or preservation of secret versions on reapply.
 
-## Credential Delivery Component
+## Credential Lifecycle Components
 
 [deployment/](deployment/) validates owned Vault records, stages named PENDING
 versions and publishes the exact runtime version after a matching model-key
 binding. Reruns preserve committed credentials; uncertain replies are reconciled
 without automatically repeating writes. Terraform manages the secret resource;
 this component manages its contents.
+
+The model-key component records a confirmed new intent, creates one regional
+GenAI key and immediately stores its returned credential before checking that
+the key is active. Existing runtime credentials are reused. An interrupted
+creation with only an intent remaining stops for explicit recovery; it never
+silently creates another key. This component stops before the permission Apply
+and credential publication.
 
 The adapter requires OCI CLI **3.94.0** with API-key authentication. It explicitly
 uses `DEFAULT` or a supplied profile/configuration path, and ignores CLI RC defaults
@@ -74,9 +81,10 @@ python3.12 -m unittest discover -s tests/unit/deployment -t . -v
 python3.12 -m unittest discover -s tests/contracts/deployment -t . -v
 ```
 
-Record validation, binding recovery, staging, publication and CLI transport have
-separate suites. Live Vault delivery and the complete deployment workflow remain
-unverified. No deployment command is exposed yet.
+Record validation, key metadata, creation/recovery, binding, staging, publication
+and CLI transport have separate suites. Live key creation, Vault delivery and
+the complete deployment workflow remain unverified. No deployment command is
+exposed yet.
 
 ## Run the Local Contracts
 
