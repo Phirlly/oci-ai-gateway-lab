@@ -17,5 +17,9 @@ class MutationUncertain(DeliveryError):
     """The request may have changed remote state; reconcile before another mutation."""
 
 
+class VaultETagConflict(DeliveryError):
+    """Vault positively rejected a conditional credential upload without applying it."""
+
+
 class ActivationPending(DeliveryError):
     """An exactly owned saved key is still in a documented activation state."""

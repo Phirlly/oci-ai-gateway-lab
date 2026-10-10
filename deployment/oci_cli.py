@@ -45,6 +45,9 @@ class OCICommand:
         if version.strip() != "3.94.0":
             raise DeliveryError("Deployment automation requires OCI CLI 3.94.0.")
 
+    def _mutation_failure(self, command, content, stderr):
+        return MutationUncertain
+
     def _execute(self, command, content, *, mutation):
         error = MutationUncertain if mutation else self.read_error
         try:
@@ -57,6 +60,8 @@ class OCICommand:
                 summary = service_error_summary(result.stderr)
                 if summary is not None:
                     print(summary, file=sys.stderr, flush=True)
+                if mutation:
+                    error = self._mutation_failure(command, content, result.stderr)
                 raise error("OCI operation could not be verified; reconcile before retry.")
             if len(result.stdout) > 1048576:
                 raise error("OCI operation could not be verified; reconcile before retry.")
