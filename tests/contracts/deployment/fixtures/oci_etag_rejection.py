@@ -12,6 +12,8 @@ if '--version' in sys.argv:
 request = json.load(sys.stdin)
 secret = request.get('secretId', 'missing')
 etag = request.get('ifMatch', 'missing')
+if mode == 'gzip-tag':
+    etag = etag.removesuffix('--gzip')
 message = f'Entity Secret with ID {secret} has a computed tag of newer, but is passed a tag of {etag}'
 if mode == 'wrong-secret':
     message = message.replace(secret, 'ocid1.vaultsecret.oc1.iad.other')
