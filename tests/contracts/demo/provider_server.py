@@ -4,6 +4,7 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 COUNTS = {"oci": 0, "anthropic": 0}
+REJECTED_ONCE = set()
 
 
 def openai_response(answer, stream):
@@ -85,6 +86,10 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except (ValueError, KeyError, TypeError):
             return self.send({"error": "invalid fixture request"}, 400)
+        if "fixture-reject-once" in text and provider not in REJECTED_ONCE:
+            REJECTED_ONCE.add(provider)
+            return self.send({"error": {"type": "rate_limit_error", "message": "synthetic transient limit"}},
+                             429, {'Retry-After': '2'})
         if "fixture-rate-limit" in text:
             return self.send({"type": "error", "error": {"type": "rate_limit_error", "message": "synthetic rate limit"}},
                              429, {'Retry-After': '7'})

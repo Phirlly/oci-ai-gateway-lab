@@ -1,4 +1,4 @@
-"""Presenter verification through both pinned provider adapters, including zero retries."""
+"""Presenter verification through both pinned adapters with explicit attempt counts."""
 
 import secrets
 import tempfile
@@ -6,7 +6,7 @@ import unittest
 
 from demo.samples import Sample, request_body
 from demo.results import completion
-from demo.verification import verify_demo
+from demo.verification import _sample, verify_demo
 from runtime.gateway_http import GatewayError
 from runtime.presenter import Presenter, initialize_presenter
 from runtime.presenter_api import PresenterAPI
@@ -38,6 +38,19 @@ class AdapterContracts(unittest.TestCase):
         self.assertTrue(all(row["usage"] is not None for row in report["samples"]))
         after = STACK.counts()
         self.assertEqual({name: after[name] - before[name] for name in after}, {"oci": 4, "anthropic": 4})
+
+    def test_one_rejection_then_success_is_exactly_two_upstream_attempts(self):
+        session = Account(self.presenter.user_id, self.presenter.email, self.password).session()
+        before = STACK.counts()
+        for model in self.presenter.models:
+            with self.subTest(model=model):
+                result = _sample(session, Sample('retry-once', 'fixture-reject-once', 'TECHNICAL'), model, False)
+                self.assertEqual(result['status'], 'PASS', result)
+                self.assertEqual(result['attempts'], 2)
+                self.assertGreaterEqual(result['retry_wait_seconds'], 2)
+                self.assertLess(result['retry_wait_seconds'], 30)
+        after = STACK.counts()
+        self.assertEqual({name: after[name] - before[name] for name in after}, {"oci": 2, "anthropic": 2})
 
     def test_each_provider_rate_limit_has_no_implicit_adapter_retry(self):
         session = Account(self.presenter.user_id, self.presenter.email, self.password).session()

@@ -3,15 +3,28 @@
 import contextlib
 import io
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from deployment.action_entrypoint import main
+from deployment.action_entrypoint import _report, main
 from .gateway_config_fixture import GATEWAY_SETTINGS
 
 
 class ActionEntrypointTests(unittest.TestCase):
+    def test_summary_shows_attempts_even_when_a_retried_sample_passes(self):
+        result = {'status': 'Ready', 'ready': True, 'verification': {'samples': [
+            {'model': 'oci-managed', 'sample': 'invoice', 'stream': False,
+             'status': 'PASS', 'seconds': 2.5, 'attempts': 2, 'retry_wait_seconds': 2}]}}
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            destination = Path(directory) / 'summary.md'
+            _report(result, {'GITHUB_STEP_SUMMARY': str(destination)})
+            summary = destination.read_text()
+        self.assertIn('| Model | Sample | Streaming | Result | Attempts | Seconds |', summary)
+        self.assertIn('| oci-managed | invoice | False | PASS | 2 | 2.5 |', summary)
+
     def environment(self):
         return {'DEPLOYMENT_CONFIG': json.dumps(GATEWAY_SETTINGS), 'GITHUB_ACTIONS': 'true',
                 'GITHUB_REPOSITORY': 'synthetic/gateway', 'GITHUB_REPOSITORY_ID': '17',

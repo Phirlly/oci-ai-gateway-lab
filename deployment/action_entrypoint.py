@@ -76,9 +76,9 @@ def _report(result, environment):
             lines.append(result['retained'])
         report = result.get('verification')
         if isinstance(report, dict):
-            lines += ['', '| Model | Sample | Streaming | Result | Seconds |', '|---|---|---|---|---|']
+            lines += ['', '| Model | Sample | Streaming | Result | Attempts | Seconds |', '|---|---|---|---|---|---|']
             for row in report['samples']:
-                lines.append('| {model} | {sample} | {stream} | {status} | {seconds} |'.format(**row))
+                lines.append('| {model} | {sample} | {stream} | {status} | {attempts} | {seconds} |'.format(**row))
         elif report:
             lines.append('Model verification: ' + report)
         with Path(destination).open('a', encoding='utf-8') as output:
