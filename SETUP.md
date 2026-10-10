@@ -68,7 +68,7 @@ using the current presenter password. A failed check reports not ready; it does
 not silently retry model calls. Inspect the workflow and Resource Manager job
 status before rerunning the same action after an interruption.
 
-Vault reads retry briefly while a new version becomes available; writes and
+Vault reads wait briefly for new versions and in-progress updates; writes and
 model-key creation are not replayed. If credential verification still fails,
 retain the saved state and reconcile it before another Deploy. Fresh-creation
 handoff errors distinguish intent verification from failures after model-key creation.

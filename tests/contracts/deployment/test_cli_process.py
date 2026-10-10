@@ -61,7 +61,7 @@ class CliProcessContracts(unittest.TestCase):
         with patch("deployment.vault_cli.time.sleep") as sleep:
             with self.assertRaises(VaultReadError):
                 client("failure").metadata("secret-id")
-        self.assertEqual(sleep.call_count, 5)
+        sleep.assert_not_called()
 
     def test_process_deadline_captures_partial_secret_output(self):
         connection = client("timeout", timeout=0.25)

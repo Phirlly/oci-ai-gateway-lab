@@ -8,7 +8,7 @@ from deployment.credential_errors import ActivationPending, DeliveryError
 from deployment.model_key_provisioning import ModelKeyProvisioner
 from .model_key_fixture import MemoryKeys
 from .record_fixtures import EXPIRES, KEY_ID
-from .vault_fixture import MemoryVault, delivery
+from .vault_fixture import MemoryVault, delivery, record
 from .vault_transport_fixture import MemoryVaultTransport
 
 
@@ -95,3 +95,48 @@ class CredentialReadbackTests(unittest.TestCase):
             self.prepare()
         self.assertEqual(self.delivery.reconcile().phase, "PENDING")
         self.assertEqual(len(self.keys.created), 1)
+
+    def test_readable_intent_and_runtime_wait_for_metadata_without_repeated_writes(self):
+        metadata = self.vault.metadata
+        delayed = set()
+
+        def during_update(secret):
+            response = metadata(secret)
+            count = len(self.vault.rows)
+            if count in (2, 3) and count not in delayed:
+                delayed.add(count)
+                response['data']['lifecycle-state'] = 'UPDATING'
+            return response
+
+        self.vault.metadata = during_update
+        receipt = self.prepare()
+        self.assertEqual(receipt.phase, 'PENDING')
+        self.assertEqual(delayed, {2, 3})
+        self.assertEqual(len(self.keys.created), 1)
+        self.assertEqual(len(self.vault.mutations), 2)
+        self.assertIn(b'model-sentinel', self.vault.rows[3][1])
+        self.assertEqual(self.sleep.call_count, 2)
+
+    def test_publication_waits_without_repeating_promotion(self):
+        receipt = self.prepare()
+        self.vault.before_promote = lambda vault: vault.metadata_overrides.update({'lifecycle-state': 'UPDATING'})
+        self.sleep.side_effect = lambda seconds: self.vault.metadata_overrides.clear()
+        self.assertEqual(self.delivery.publish(receipt.version_name, KEY_ID).phase, 'CURRENT')
+        self.sleep.assert_called_once_with(2)
+        self.assertEqual([m[0] for m in self.vault.mutations], ['stage', 'stage', 'promote'])
+
+    def test_changed_current_during_readiness_wait_is_preserved(self):
+        receipt = self.prepare()
+        other = record(operation_id='b' * 32)
+
+        def competing_promotion(vault):
+            vault.add(other, current=True)
+            vault.metadata_overrides['lifecycle-state'] = 'UPDATING'
+
+        self.vault.before_promote = competing_promotion
+        self.sleep.side_effect = lambda seconds: self.vault.metadata_overrides.clear()
+        with self.assertRaises(DeliveryError):
+            self.delivery.publish(receipt.version_name, KEY_ID)
+        self.sleep.assert_called_once_with(2)
+        self.assertEqual(self.vault.rows[self.vault.current][0], other.version_name)
+        self.assertEqual([m[0] for m in self.vault.mutations], ['stage', 'stage', 'promote'])

@@ -34,7 +34,8 @@ class VaultCLI(OCICommand):
                 time.sleep(_READ_DELAYS[attempt])
 
     def metadata(self, secret_id):
-        return self._request("metadata", {"secretId": secret_id})
+        # Ownership validation and lifecycle progress share one budget upstream.
+        return self.request(_COMMANDS["metadata"], {"secretId": secret_id}, mutation=False)
 
     def versions(self, secret_id):
         return self._request("versions", {"secretId": secret_id})

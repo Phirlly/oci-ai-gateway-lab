@@ -2,6 +2,7 @@
 
 import json
 import unittest
+from unittest.mock import patch
 
 from deployment.cleanup_keys import cleanup_keys
 from deployment.cleanup_vault import CleanupVault
@@ -92,3 +93,24 @@ class CleanupReceiptTests(unittest.TestCase):
         self.keys.rows.clear()
         self.assertTrue(self.remove())
         self.assertEqual(self.vault.current, 1)
+
+    def test_updating_manifest_and_receipt_wait_without_repeating_writes(self):
+        metadata = self.vault.metadata
+        delayed = set()
+
+        def during_update(secret):
+            response = metadata(secret)
+            count = len(self.vault.rows)
+            if count > 3 and count not in delayed:
+                delayed.add(count)
+                response['data']['lifecycle-state'] = 'UPDATING'
+            return response
+
+        self.vault.metadata = during_update
+        with patch('time.sleep') as sleep:
+            self.assertTrue(self.remove())
+        self.assertEqual(delayed, {4, 5})
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(len(self.vault.mutations), 2)
+        self.assertEqual(len(self.keys.deleted), 1)
+        self.assertEqual(self.vault.current, 3)

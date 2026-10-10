@@ -16,7 +16,6 @@ class VaultReadRetryTests(unittest.TestCase):
 
     def test_each_read_keeps_its_exact_selector_when_retrying(self):
         operations = (
-            lambda: self.client.metadata("secret"),
             lambda: self.client.versions("secret"),
             lambda: self.client.bundle("secret", version_name="intent-fixed"),
             lambda: self.client.bundle("secret", version_number=3),
@@ -50,6 +49,13 @@ class VaultReadRetryTests(unittest.TestCase):
                 with self.assertRaises(MutationUncertain):
                     operation()
                 self.assertEqual(self.client.request.call_count, 1)
+        self.sleep.assert_not_called()
+
+    def test_metadata_has_one_read_so_owner_readiness_controls_the_budget(self):
+        self.client.request = Mock(side_effect=VaultReadError("unavailable"))
+        with self.assertRaises(VaultReadError):
+            self.client.metadata("secret")
+        self.assertEqual(self.client.request.call_count, 1)
         self.sleep.assert_not_called()
 
     def test_semantic_failure_is_not_a_transport_retry(self):
