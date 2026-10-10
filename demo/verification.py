@@ -7,6 +7,7 @@ from runtime.presenter_api import presenter_session
 
 from .results import completion, streamed_completion
 from .response_errors import ModelRouteError
+from .retry_policy import MAX_ATTEMPTS, SAMPLE_TIMEOUT_SECONDS, retry_delay
 from .samples import CATEGORIES, load_samples, request_body
 
 
@@ -52,21 +53,37 @@ def presenter_client(public, presenter, password):
 def _sample(client, sample, model, stream):
     result = {"model": model, "sample": sample.identifier, "stream": stream,
               "expected": sample.expected, "category": None, "usage": None,
-              "cost_usd": None, "status": "ERROR", "error": None, "error_details": None}
+              "cost_usd": None, "status": "ERROR", "error": None, "error_details": None,
+              "attempts": 0, "retry_wait_seconds": 0}
     started = time.monotonic()
-    try:
-        response = client.request("POST", "/chat/completions", request_body(sample, model, stream=stream), timeout=90)
-        answer, usage = (streamed_completion if stream else completion)(response, model)
-        category = answer.upper()
-        result.update(category=category if category in CATEGORIES else "INVALID_CATEGORY", usage=usage,
-                      status="PASS" if category == sample.expected else "FAIL")
-    except ModelRouteError as error:
-        result.update(error=str(error), error_details=error.details)
-    except GatewayError as error:
-        # Owned errors contain categories/status only, never upstream response bodies.
-        result["error"] = str(error)
-    except TimeoutError:
-        result["error"] = "Model request timed out; no automatic retry was made"
+    deadline = started + SAMPLE_TIMEOUT_SECONDS
+    body = request_body(sample, model, stream=stream)
+    while result['attempts'] < MAX_ATTEMPTS:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        result['attempts'] += 1
+        try:
+            response = client.request("POST", "/chat/completions", body, timeout=remaining)
+            answer, usage = (streamed_completion if stream else completion)(response, model)
+            category = answer.upper()
+            result.update(category=category if category in CATEGORIES else "INVALID_CATEGORY", usage=usage,
+                          status="PASS" if category == sample.expected else "FAIL", error=None, error_details=None)
+        except ModelRouteError as error:
+            result.update(error=str(error), error_details=error.details)
+            delay = retry_delay(error, result['attempts'], deadline - time.monotonic())
+            if delay is not None:
+                waiting = time.monotonic()
+                time.sleep(delay)
+                result['retry_wait_seconds'] += time.monotonic() - waiting
+                continue
+        except GatewayError as error:
+            # Owned errors contain categories/status only, never upstream response bodies.
+            result.update(error=str(error), error_details=None)
+        except TimeoutError:
+            result.update(error="Model request timed out; no further retry was made", error_details=None)
+        break
+    result['retry_wait_seconds'] = round(result['retry_wait_seconds'], 3)
     result["seconds"] = round(time.monotonic() - started, 3)
     return result
 

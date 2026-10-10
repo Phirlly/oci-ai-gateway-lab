@@ -41,20 +41,28 @@ def _error_type(body):
         return 'UNKNOWN'
 
 
-def _retry_seconds(headers, name):
+def _retry_guidance(headers, name):
     # HTTPMessage.items() preserves duplicate field lines; .get() would hide them.
     values = [value for key, value in headers.items() if isinstance(key, str) and key.lower() == name]
+    if not values:
+        return None, True
     if len(values) != 1 or not isinstance(values[0], str) or not re.fullmatch(r'[0-9]{1,4}', values[0]):
-        return None
+        return None, False
     seconds = int(values[0])
-    return seconds if seconds <= 3600 else None
+    return (seconds, True) if seconds <= 3600 else (None, False)
 
 
 class ModelRouteError(GatewayError):
     def __init__(self, response):
         super().__init__(f'Model route returned HTTP {response.status}')
         self.details = None
+        self.retry_allowed = False
+        self.retry_after_seconds = 0
         if response.status == 429:
+            gateway, gateway_valid = _retry_guidance(response.headers, 'retry-after')
+            provider, provider_valid = _retry_guidance(response.headers, 'llm_provider-retry-after')
+            self.retry_allowed = gateway_valid and provider_valid
+            self.retry_after_seconds = max(gateway or 0, provider or 0)
             self.details = {'type': _error_type(response.body),
-                            'retry_after_seconds': _retry_seconds(response.headers, 'retry-after'),
-                            'provider_retry_after_seconds': _retry_seconds(response.headers, 'llm_provider-retry-after')}
+                            'retry_after_seconds': gateway,
+                            'provider_retry_after_seconds': provider}

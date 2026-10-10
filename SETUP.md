@@ -59,19 +59,20 @@ automatically for nonsecret recovery records; it needs no secrets or setup.
 
 Open **Actions → Gateway demo → Run workflow** on the permitted branch. Choose
 **Deploy**. It submits Terraform, delivers runtime credentials through Vault,
-creates restricted presenter access and runs eight bounded sample requests.
+creates restricted presenter access and verifies eight samples.
 
 The run summary reports status, Compare URL, username and sample results. Open
 the URL only after **Ready**, sign in with `DEMO_PASSWORD`, select `oci-managed`
 and `external-anthropic`, then use [the presenter script](demo/PROMPT.md).
 
-**Status** makes no model calls. **Verify samples** repeats the eight requests
-using the current presenter password. A failed check reports not ready; it does
-not silently retry model calls. Inspect the workflow and Resource Manager job
-status before rerunning the same action after an interruption.
-For HTTP429, sample results include a recognized error type and bounded numeric
-retry guidance when available. These diagnostics omit raw errors and do not
-automatically identify the cause or retry the request.
+**Status** makes no model calls. **Verify samples** repeats the eight samples
+using the current presenter password. Only completed HTTP429 responses permit
+retries: at most three attempts per sample, 24 total. Waits start at 2 then 4
+seconds, honor longer numeric retry guidance up to 30 seconds, and share each
+sample's 90-second deadline. Unsupported guidance, timeouts and other failures
+stop that sample. Results show attempts, elapsed time and safe error metadata;
+they do not establish the cause of a rate limit. Any failed sample means not ready.
+Inspect workflow and Resource Manager status before rerunning after an interruption.
 
 Vault reads wait briefly for new versions and in-progress updates. A confirmed
 ETag rejection of credential staging permits up to three attempts, each after
