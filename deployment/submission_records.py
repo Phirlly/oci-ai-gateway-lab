@@ -34,26 +34,38 @@ class Intent:
     operation_id: str
     request_hash: str
     package_hash: str
+    retry_of: str | None = None
 
     def __post_init__(self):
         if self.kind not in ('create-stack', 'apply', 'destroy'):
             raise DeliveryError('Unsupported submission operation.')
         for name, value in asdict(self).items():
-            if name == 'kind':
+            if name == 'kind' or (name == 'retry_of' and value is None):
                 continue
-            length = 32 if name == 'operation_id' else 64
+            length = 32 if name in ('operation_id', 'retry_of') else 64
             if not isinstance(value, str) or re.fullmatch('[a-f0-9]{%d}' % length, value) is None:
                 raise DeliveryError('Invalid submission identity.')
+        if self.retry_of is not None and (self.kind != 'apply' or self.retry_of == self.operation_id):
+            raise DeliveryError('Only an Apply can retry a different original operation.')
 
     def payload(self):
-        return {'version': 1, **asdict(self)}
+        fields = asdict(self)
+        if self.retry_of is None:
+            fields.pop('retry_of')
+        return {'version': 1 if self.retry_of is None else 2, **fields}
 
     @classmethod
     def parse(cls, payload):
         try:
             if (not isinstance(payload, dict) or type(payload['version']) is not int
-                    or payload['version'] != 1
-                    or set(payload) != {'version', *cls.__dataclass_fields__}):
+                    or payload['version'] not in (1, 2)):
+                raise ValueError
+            fields = set(cls.__dataclass_fields__)
+            if payload['version'] == 1:
+                fields.remove('retry_of')
+            elif payload.get('retry_of') is None:
+                raise ValueError
+            if set(payload) != {'version', *fields}:
                 raise ValueError
             return cls(**{k: v for k, v in payload.items() if k != 'version'})
         except (KeyError, TypeError, ValueError):

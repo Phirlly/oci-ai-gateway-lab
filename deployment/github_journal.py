@@ -3,6 +3,7 @@
 import re
 import uuid
 
+from .apply_attempts import latest_applies
 from .credential_errors import DeliveryError, MutationUncertain
 from .github_pagination import TASK, next_page
 from .submission_records import Intent, controller_identity
@@ -49,7 +50,8 @@ class GitHubJournal:
             for row in rows:
                 entry = self._entry(row)
                 identifier, _, intent = entry
-                key = (intent.controller_id, intent.target_hash, intent.kind, intent.request_hash)
+                key = (intent.controller_id, intent.target_hash, intent.kind,
+                       intent.request_hash, intent.retry_of)
                 if identifier in ids or intent.operation_id in operations or key in requests:
                     raise DeliveryError('Duplicate journal records require reconciliation.')
                 ids.add(identifier)
@@ -62,18 +64,22 @@ class GitHubJournal:
                     entries.append(intent)
             following = next_page(headers.get('link'), self.repository, self.repository_id, page)
             if following is None:
+                latest_applies(entries)
                 return entries
             if following > 25 or not rows:
                 raise DeliveryError('Journal pagination limit or empty intermediate page reached.')
             page = following
 
-    def submit(self, target_hash, kind, request_hash, package_hash, callback):
+    def submit(self, target_hash, kind, request_hash, package_hash, callback, *, retry_of=None):
         """Never replay a callback for an existing or uncertain persisted intent."""
         prior = self.read(target_hash)
-        if any(i.kind == kind and (kind in ('create-stack', 'destroy') or i.request_hash == request_hash)
-               for i in prior):
+        if retry_of is None and any(
+                i.kind == kind and (kind in ('create-stack', 'destroy') or i.request_hash == request_hash)
+                for i in prior):
             raise DeliveryError('Submission is already recorded; recover it before proceeding.')
-        intent = Intent(self.controller_id, target_hash, kind, uuid.uuid4().hex, request_hash, package_hash)
+        intent = Intent(self.controller_id, target_hash, kind, uuid.uuid4().hex,
+                        request_hash, package_hash, retry_of)
+        latest_applies([*prior, intent])
         data, _ = self.api.request('POST', self.path + '/deployments', {
             'ref': self.commit, 'task': TASK, 'payload': intent.payload(),
             'environment': 'gateway-submissions', 'auto_merge': False, 'required_contexts': [],
