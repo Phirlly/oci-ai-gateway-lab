@@ -1,5 +1,6 @@
 """Validate persisted submission identity against exact Resource Manager reads."""
 
+from .apply_attempts import latest_applies
 from .credential_errors import DeliveryError
 from .foundation_package import FoundationPackage
 from .resource_manager_jobs import active_job_id, parse_job
@@ -64,6 +65,7 @@ def verified_job(client, target, stack_id, job_id, intent):
 
 
 def reconcile_jobs(client, target, stack_id, intents):
+    latest_applies(intents)
     response = client.list_jobs(target.compartment_id, stack_id)
     active = active_job_id(response, target, stack_id)
     records = {intent.operation_id: intent for intent in intents if intent.kind in ('apply', 'destroy')}
@@ -85,6 +87,9 @@ def reconcile_jobs(client, target, stack_id, intents):
         raise DeliveryError('Recorded job was not observed; no new submission is authorized.')
     jobs = {operation: verified_job(client, target, stack_id, job_id, records[operation])
             for operation, job_id in candidates.items()}
+    for intent in records.values():
+        if intent.retry_of is not None and jobs[intent.retry_of].state != 'FAILED':
+            raise DeliveryError('Apply retry requires its original job to remain FAILED.')
     if active and active not in candidates.values():
         raise DeliveryError('An unrelated active job blocks submission.')
     return jobs

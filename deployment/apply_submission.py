@@ -1,5 +1,6 @@
 """Upload exact inputs once per recorded Apply; recover instead of resubmitting."""
 
+from .apply_attempts import latest_applies
 from .credential_errors import DeliveryError
 from .credential_identity import valid_ocid
 from .resource_manager_jobs import ACTIVE_STATES
@@ -9,8 +10,10 @@ from .submission_recovery import reconcile_jobs, submission_scope, verified_job,
 from .submission_upload import upload_inputs
 
 
-def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
+def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid, retry_failed=False):
     """Caller must establish key authority before supplying a derived binding."""
+    if type(retry_failed) is not bool:
+        raise DeliveryError('Apply recovery must be explicitly enabled or disabled.')
     scope = submission_scope(client, journal, target, package)
     variables = target.config.orm_variables(model_key_ocid=model_key_ocid)
     intents = journal.read(scope)
@@ -27,9 +30,8 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
         raise DeliveryError('Existing model-key binding must be preserved.')
     jobs = reconcile_jobs(client, target, stack_id, intents)
     request_hash = apply_request_hash(stack_id, variables, package.digest)
-    selected = [i for i in intents if i.kind == 'apply' and i.request_hash == request_hash]
-    if len(selected) > 1:
-        raise DeliveryError('Duplicate Apply intents require reconciliation.')
+    selected = latest_applies(intents).get(request_hash)
+    retry_of = None
 
     def result(job):
         if job.state == 'SUCCEEDED':
@@ -37,14 +39,17 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
         return job
 
     if selected:
-        requested = jobs[selected[0].operation_id]
+        requested = jobs[selected.operation_id]
         tags = response['data']['freeform-tags']
         if (tags.get('request_hash') != request_hash or tags.get('package_hash') != package.digest
                 or response['data']['variables'] != variables):
             raise DeliveryError('A later stack update superseded this request; explicit recovery is required.')
         if any(job.state in ACTIVE_STATES and job.job_id != requested.job_id for job in jobs.values()):
             raise DeliveryError('Another active submission must finish first.')
-        return result(requested)
+        if not (retry_failed and requested.state == 'FAILED' and selected.retry_of is None):
+            return result(requested)
+        package.verify(client.get_job_package(requested.job_id))
+        retry_of = selected.operation_id
     if any(job.state in ACTIVE_STATES for job in jobs.values()):
         raise DeliveryError('An active submission must finish before new work.')
 
@@ -66,4 +71,4 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid):
             raise DeliveryError('Apply response is unverified; recover its recorded intent.') from None
         return result(verified_job(client, target, stack_id, identifier, intent))
 
-    return journal.submit(scope, 'apply', request_hash, package.digest, submit)
+    return journal.submit(scope, 'apply', request_hash, package.digest, submit, retry_of=retry_of)

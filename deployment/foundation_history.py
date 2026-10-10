@@ -1,5 +1,6 @@
 """Recover base resource identity without clearing a later permission binding."""
 
+from .apply_attempts import latest_applies
 from .credential_errors import DeliveryError
 from .resource_manager_jobs import ACTIVE_STATES
 from .submission_records import apply_request_hash
@@ -21,20 +22,21 @@ def recover_base(client, journal, target, package, stack_id):
         stack_id, target.config.orm_variables(model_key_ocid=stack.model_key_ocid), package.digest,
     )
     tags = response['data']['freeform-tags']
-    current = [i for i in intents if i.kind == 'apply' and i.request_hash == current_hash]
-    if (len(current) != 1 or tags.get('request_hash') != current_hash
+    attempts = latest_applies(intents)
+    current = attempts.get(current_hash)
+    if (current is None or tags.get('request_hash') != current_hash
             or tags.get('package_hash') != package.digest):
         raise DeliveryError('Current foundation request is unverified; explicit recovery is required.')
-    if any(job.state in ACTIVE_STATES and operation != current[0].operation_id
+    if any(job.state in ACTIVE_STATES and operation != current.operation_id
            for operation, job in jobs.items()):
         raise DeliveryError('Another active job blocks credential preparation.')
     base_hash = apply_request_hash(
         stack_id, target.config.orm_variables(model_key_ocid=None), package.digest,
     )
-    matches = [i for i in intents if i.kind == 'apply' and i.request_hash == base_hash]
-    if len(matches) != 1:
-        raise DeliveryError('A unique recorded base Apply is required.')
-    base = jobs[matches[0].operation_id]
+    selected = attempts.get(base_hash)
+    if selected is None:
+        raise DeliveryError('A recorded base Apply is required.')
+    base = jobs[selected.operation_id]
     if base.state != 'SUCCEEDED':
         raise DeliveryError('Base Apply must succeed before credential preparation.')
     package.verify(client.get_job_package(base.job_id))
