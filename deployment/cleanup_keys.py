@@ -1,6 +1,6 @@
 """Delete only manifest-owned keys, saving terminal evidence before Destroy."""
 
-from .cleanup_records import encoded, key_receipt, manifest_context, parse_manifest
+from .cleanup_records import encoded, key_receipt, legacy_receipt_name, manifest_context, parse_manifest
 from .credential_errors import DeliveryError, MutationUncertain
 from .model_key_cleanup import cleanup_candidates, exact_cleanup_key
 
@@ -33,16 +33,19 @@ def cleanup_keys(client, store, *, package_hash, config_hash):
             or not operations <= set(owned.values())):
         raise DeliveryError('Owned key creation or changed cleanup inventory remains unresolved.')
     receipts = {identifier: key_receipt(store, manifest, identifier) for identifier in owned}
-    allowed_names = {name} | {receipt[0] for receipt in receipts.values()}
+    aliases = {identifier: {receipt[0], legacy_receipt_name(store, identifier)}
+               for identifier, receipt in receipts.items()}
+    allowed_names = {name} | {alias for names in aliases.values() for alias in names}
     if not history.documents.keys() <= allowed_names:
         raise DeliveryError('Unexpected cleanup evidence requires explicit recovery.')
-    for receipt_name, content in receipts.values():
-        if receipt_name in history.documents and history.documents[receipt_name] != content:
-            raise DeliveryError('Saved key-removal evidence conflicts with its manifest.')
+    for identifier, names in aliases.items():
+        for receipt_name in names:
+            if receipt_name in history.documents and history.documents[receipt_name] != receipts[identifier][1]:
+                raise DeliveryError('Saved key-removal evidence conflicts with its manifest.')
     # All identities are read/verified before the first deletion.
     snapshots = {}
     for identifier, operation in owned.items():
-        if receipts[identifier][0] not in history.documents:
+        if not aliases[identifier] & history.documents.keys():
             snapshots[identifier] = exact_cleanup_key(
                 client, identity, identifier, {'freeform-tags': {'operation_id': operation}})
     store.save(name, encoded(manifest))

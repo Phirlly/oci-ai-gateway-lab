@@ -41,7 +41,13 @@ def parse_manifest(content, context):
 
 
 def key_receipt(store, manifest, identifier):
-    name = 'removed-' + store.operation + '-' + digest(identifier)[:32]
+    # Vault version names are limited to 50 characters; hash the full identity.
+    name = 'removed-' + digest([store.operation, identifier])[:32]
     content = encoded({'schema_version': 1, 'kind': 'key-removed',
                        'manifest_hash': digest(manifest), 'key_id': identifier})
     return name, content
+
+
+def legacy_receipt_name(store, identifier):
+    """Recognize retained evidence without emitting the older oversized name."""
+    return 'removed-' + store.operation + '-' + digest(identifier)[:32]

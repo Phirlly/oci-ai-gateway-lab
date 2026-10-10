@@ -23,7 +23,9 @@ class CleanupVault:
         self.client, self.target, self.operation = client, target, operation
 
     def _document_name(self, name):
-        return name == 'cleanup-' + self.operation or re.fullmatch('removed-' + self.operation + '-[a-f0-9]{32}', name)
+        return (name == 'cleanup-' + self.operation
+                or re.fullmatch('removed-[a-f0-9]{32}', name)
+                or re.fullmatch('removed-' + self.operation + '-[a-f0-9]{32}', name))
 
     def read(self):
         etag, current = read_secret_metadata(self.client, self.target)
