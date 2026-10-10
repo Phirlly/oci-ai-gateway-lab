@@ -3,7 +3,7 @@
 import json
 
 from .credential_creation import prepare_credentials, runtime_record
-from .credential_errors import DeliveryError, MutationUncertain
+from .credential_errors import ActivationPending, DeliveryError, MutationUncertain
 from .model_key_state import owned_candidates, parse_model_key
 from .vault_state import read_version
 
@@ -60,7 +60,13 @@ class ModelKeyProvisioner:
         )
         if self._discover():
             raise DeliveryError("Existing model keys without a runtime bundle require explicit recovery.")
-        claim = self.delivery.stage(draft.intent, fresh_intent=True)
+        try:
+            claim = self.delivery.stage(draft.intent, fresh_intent=True)
+        except DeliveryError:
+            raise DeliveryError(
+                "Fresh intent verification failed. No model-key creation was attempted by this invocation; "
+                "reconcile the saved state before retry."
+            ) from None
         if claim.phase == "CURRENT":
             return self._ready(claim, runtime_context)
         if claim.phase != "INTENT" or claim.version_name != draft.intent.version_name:
@@ -71,9 +77,17 @@ class ModelKeyProvisioner:
             response = self.keys.create(json.loads(draft.intent.content)["request"])
         except MutationUncertain:
             raise DeliveryError("Model-key creation is uncertain; recover the recorded intent before retry.") from None
-        key = parse_model_key(response, draft.intent, now=self.delivery.now(), require_secret=True)
-        runtime = runtime_record(draft, key.key_id, key.secret)
-        staged = self.delivery.stage(runtime)
-        if staged.model_key_ocid != key.key_id or staged.version_name != runtime.version_name:
-            raise DeliveryError("Runtime staging conflicts with existing credentials; recovery is required.")
-        return self._ready(staged, runtime_context)
+        try:
+            key = parse_model_key(response, draft.intent, now=self.delivery.now(), require_secret=True)
+            runtime = runtime_record(draft, key.key_id, key.secret)
+            staged = self.delivery.stage(runtime)
+            if staged.model_key_ocid != key.key_id or staged.version_name != runtime.version_name:
+                raise DeliveryError("Runtime staging conflicts with existing credentials; recovery is required.")
+            return self._ready(staged, runtime_context)
+        except ActivationPending:
+            raise
+        except DeliveryError:
+            raise DeliveryError(
+                "Model-key creation returned, but runtime credential verification failed; "
+                "the key may exist. Recover the saved state without repeating creation."
+            ) from None

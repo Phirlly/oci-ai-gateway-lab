@@ -1,6 +1,7 @@
 """Fixed Vault commands using the shared protected OCI CLI transport."""
 
 import base64
+import time
 
 from .credential_errors import VaultReadError
 from .oci_cli import OCICommand
@@ -12,13 +13,25 @@ _COMMANDS = {
     "stage": ("vault", "secret", "update-base64", "--force"),
     "promote": ("vault", "secret", "update", "--force"),
 }
+_READ_DELAYS = (2, 4, 8, 16, 30)
 
 
 class VaultCLI(OCICommand):
     read_error = VaultReadError
 
     def _request(self, operation, payload):
-        return self.request(_COMMANDS[operation], payload, mutation=operation in {"stage", "promote"})
+        command = _COMMANDS[operation]
+        if operation in {"stage", "promote"}:
+            return self.request(command, payload, mutation=True)
+        # An accepted Vault update can precede exact-version availability.
+        # Retry only transport reads; callers still validate content and ownership.
+        for attempt in range(len(_READ_DELAYS) + 1):
+            try:
+                return self.request(command, payload, mutation=False)
+            except VaultReadError:
+                if attempt == len(_READ_DELAYS):
+                    raise VaultReadError("Vault read verification remained unavailable after bounded retries.") from None
+                time.sleep(_READ_DELAYS[attempt])
 
     def metadata(self, secret_id):
         return self._request("metadata", {"secretId": secret_id})

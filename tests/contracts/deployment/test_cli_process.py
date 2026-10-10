@@ -58,8 +58,10 @@ class CliProcessContracts(unittest.TestCase):
                 self.assertEqual(stdout.getvalue() + stderr.getvalue(), "")
 
     def test_read_failure_remains_a_read_error(self):
-        with self.assertRaises(VaultReadError):
-            client("failure").metadata("secret-id")
+        with patch("deployment.vault_cli.time.sleep") as sleep:
+            with self.assertRaises(VaultReadError):
+                client("failure").metadata("secret-id")
+        self.assertEqual(sleep.call_count, 5)
 
     def test_process_deadline_captures_partial_secret_output(self):
         connection = client("timeout", timeout=0.25)
