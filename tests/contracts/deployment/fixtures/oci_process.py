@@ -11,7 +11,17 @@ if "--version" in sys.argv:
     raise SystemExit(0)
 
 request = json.load(sys.stdin)
-if mode == "empty-list":
+if mode in ("service-error", "service-unknown", "service-timeout"):
+    print("secret-sentinel", flush=True)
+    print('ServiceError:\n' + json.dumps({
+        "status": 409, "code": "secret-sentinel" if mode == "service-unknown" else "IncorrectState",
+        "message": "secret-sentinel", "request_endpoint": "https://private.example/secret-sentinel",
+        "opc-request-id": "request-secret-sentinel", "extra": request,
+    }), file=sys.stderr, flush=True)
+    if mode == "service-timeout":
+        time.sleep(5)
+    raise SystemExit(1)
+elif mode == "empty-list":
     raise SystemExit(0)
 elif mode == "zero-total":
     print('{"opc-total-items": "0"}')

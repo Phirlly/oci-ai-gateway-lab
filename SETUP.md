@@ -52,6 +52,8 @@ support HTTPS and certificate issuance; gateway/database ports stay private.
 the settings JSON. GitHub's built-in token records recovery history; no personal
 GitHub token is required by the workflow. Local OCI profile names, including
 `DEFAULT`, are not deployment settings and are not used on GitHub runners.
+Configure only **gateway**. The workflow maintains **gateway-submissions**
+automatically for nonsecret recovery records; it needs no secrets or setup.
 
 ## Run the demo
 
@@ -72,6 +74,8 @@ Vault reads wait briefly for new versions and in-progress updates; writes and
 model-key creation are not replayed. If credential verification still fails,
 retain the saved state and reconcile it before another Deploy. Fresh-creation
 handoff errors distinguish intent verification from failures after model-key creation.
+Failed runs log any verified OCI HTTP status and recognized service error code;
+request contents and detailed error payloads remain suppressed.
 
 ## Reuse and adapt
 
