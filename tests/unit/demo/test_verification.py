@@ -35,7 +35,9 @@ class VerificationTests(unittest.TestCase):
             return reply({}, 200 if self.mode == "admin" else 403)
         model = data["model"]
         if self.mode == "provider-error":
-            return reply({"error": "private provider error"}, 429)
+            return Response(429, json.dumps({'error': {'type': 'throttling_error',
+                                                      'message': 'private provider error'}}).encode(),
+                            {'retry-after': '3', 'llm_provider-retry-after': '8'})
         text = data["messages"][1]["content"]
         answer = "BILLING" if "invoice" in text else "ACCESS" if "locked" in text else "TECHNICAL"
         if self.mode == "wrong-answer":
@@ -67,6 +69,10 @@ class VerificationTests(unittest.TestCase):
         self.assertFalse(report["ready"])
         self.assertEqual({row["status"] for row in report["samples"]}, {"ERROR"})
         self.assertNotIn("private provider error", json.dumps(report))
+        self.assertTrue(all(row['error_details'] == {'type': 'throttling_error',
+                                                     'retry_after_seconds': 3,
+                                                     'provider_retry_after_seconds': 8}
+                            for row in report['samples']))
         self.assertEqual(len(self.session.request.call_args_list), 10)
 
     def test_administrative_access_stops_before_inference(self):

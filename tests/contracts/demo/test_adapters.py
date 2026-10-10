@@ -5,7 +5,9 @@ import tempfile
 import unittest
 
 from demo.samples import Sample, request_body
+from demo.results import completion
 from demo.verification import verify_demo
+from runtime.gateway_http import GatewayError
 from runtime.presenter import Presenter, initialize_presenter
 from runtime.presenter_api import PresenterAPI
 from runtime.presenter_state import PresenterState
@@ -45,5 +47,10 @@ class AdapterContracts(unittest.TestCase):
                 response = session.request("POST", "/chat/completions",
                                            request_body(Sample("rate-limit", "fixture-rate-limit", "TECHNICAL"), model), timeout=30)
                 self.assertEqual(response.status, 429)
+                with self.assertRaises(GatewayError) as error:
+                    completion(response, model)
+                self.assertEqual(error.exception.details['type'], 'throttling_error')
+                self.assertEqual(error.exception.details['provider_retry_after_seconds'], 7)
+                self.assertIsNone(error.exception.details['retry_after_seconds'])
         after = STACK.counts()
         self.assertEqual({name: after[name] - before[name] for name in after}, {"oci": 1, "anthropic": 1})

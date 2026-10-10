@@ -42,11 +42,13 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def send(self, value, status=200):
+    def send(self, value, status=200, headers=None):
         content = json.dumps(value).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(content)))
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(content)
 
@@ -84,7 +86,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError):
             return self.send({"error": "invalid fixture request"}, 400)
         if "fixture-rate-limit" in text:
-            return self.send({"type": "error", "error": {"type": "rate_limit_error", "message": "synthetic rate limit"}}, 429)
+            return self.send({"type": "error", "error": {"type": "rate_limit_error", "message": "synthetic rate limit"}},
+                             429, {'Retry-After': '7'})
         answer = "BILLING" if "invoice" in text else "ACCESS" if "locked" in text else "TECHNICAL"
         stream = value.get("stream", False)
         output = (openai_response if provider == "oci" else anthropic_response)(answer, stream)
