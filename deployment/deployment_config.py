@@ -77,4 +77,7 @@ def load_config(content):
         value = json.loads(encoded.decode("utf-8"), object_pairs_hook=_unique_object)
     except (ValueError, UnicodeError, RecursionError):
         raise DeliveryError("Invalid foundation JSON; supply one bounded, duplicate-free object.") from None
+    if isinstance(value, dict) and "schema_version" in value:
+        from .gateway_config import GatewayConfig
+        return GatewayConfig(value)
     return FoundationConfig(value)

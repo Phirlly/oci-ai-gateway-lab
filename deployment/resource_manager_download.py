@@ -13,11 +13,24 @@ from .foundation_package import MAX_ARCHIVE_BYTES
 
 
 def download_job_package(client, job_id):
+    return _download_package(client, job_id, "job")
+
+
+def download_stack_package(client, stack_id):
+    return _download_package(client, stack_id, "stack")
+
+
+def download_job_state(client, job_id):
+    return _download_package(client, job_id, 'job', state=True)
+
+
+def _download_package(client, identifier, kind, *, state=False):
     # Keep the sole stdin frame below POSIX PIPE_BUF so an empty pipe cannot
     # block before the timed read loop, even if the child never consumes input.
-    if not isinstance(job_id, str) or len(job_id) > 256 or not valid_ocid(job_id, 'ormjob'):
-        raise CloudReadError('A bounded Resource Manager job identifier is required.')
-    command = client.command + ['resource-manager', 'job', 'get-job-tf-config',
+    if not isinstance(identifier, str) or len(identifier) > 256 or not valid_ocid(identifier, 'orm' + kind):
+        raise CloudReadError('A bounded Resource Manager identifier is required.')
+    suffix = '-tf-state' if state else '-tf-config'
+    command = client.command + ['resource-manager', kind, 'get-' + kind + suffix,
                                 '--file', '-', '--from-json', 'file:///dev/stdin']
     process = None
     try:
@@ -25,7 +38,7 @@ def download_job_package(client, job_id):
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.DEVNULL, shell=False,
                                    start_new_session=True, env=client.environment)
-        process.stdin.write(json.dumps({'jobId': job_id}).encode())
+        process.stdin.write(json.dumps({kind + 'Id': identifier}).encode())
         process.stdin.close()
         content = bytearray()
         with selectors.DefaultSelector() as selector:
@@ -44,7 +57,7 @@ def download_job_package(client, job_id):
             raise ValueError
         return bytes(content)
     except (OSError, ValueError, TypeError, subprocess.TimeoutExpired):
-        raise CloudReadError('Job configuration is unavailable or unverified; retry the read later.') from None
+        raise CloudReadError('Terraform configuration is unavailable or unverified; retry the read later.') from None
     finally:
         if process is not None:
             if process.poll() is None:

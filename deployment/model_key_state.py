@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 
-from .credential_errors import DeliveryError
+from .credential_errors import ActivationPending, DeliveryError
 from .credential_identity import valid_ocid
 from .credential_records import intent_request, valid_secret
 
@@ -54,6 +54,8 @@ def parse_model_key(response, record, *, now, expected_key_id=None,
                 raise ValueError("One-time value")
             secret = slot["key"]
         if require_active and (data["lifecycle-state"] != "ACTIVE" or slot["state"] != "ACTIVE"):
+            if data["lifecycle-state"] in {'CREATING', 'UPDATING'} and slot['state'] in {'ACTIVE', 'INACTIVE'}:
+                raise ActivationPending('Saved model key is still activating; poll its exact owned metadata.')
             raise ValueError("Not active")
         return ModelKey(key_id, secret)
     except (KeyError, TypeError, ValueError, AttributeError):

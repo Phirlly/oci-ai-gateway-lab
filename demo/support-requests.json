@@ -1,0 +1,5 @@
+[
+  {"id": "duplicate-charge", "text": "My monthly subscription invoice charged me twice for the same plan. Please correct the duplicate charge."},
+  {"id": "locked-account", "text": "My account is locked after several incorrect password attempts. I need to restore my ability to sign in."},
+  {"id": "export-error", "text": "I can sign in successfully, but every report export fails with HTTP 500. The export feature stopped working today."}
+]

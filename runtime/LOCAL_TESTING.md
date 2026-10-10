@@ -12,6 +12,7 @@ or additional Python packages are needed.
 
 ```sh
 python3.12 -m tests.contracts.runtime
+python3.12 -m tests.contracts.demo
 ```
 
 For a Podman machine available through the Docker `podman` context:
@@ -23,6 +24,11 @@ GATEWAY_TEST_DOCKER_CONTEXT=podman python3.12 -m tests.contracts.runtime
 The runner pulls pinned images, creates disposable credentials, checks the
 isolated runtime and removes its own resources. It leaves the engine running.
 The first image download can take several minutes.
+
+The separate demo suite exercises both real pinned provider adapters against
+isolated synthetic HTTP providers, including streaming and rate-limit behavior.
+It runs inside the gateway container; the runtime suite checks the published
+local edge. Neither suite establishes real account/model access or public TLS.
 
 ## Image Pulls
 
@@ -54,7 +60,7 @@ Supply the retained inputs and remove only that project's containers and storage
 
 ```sh
 GATEWAY_CONFIG_FILE="$PWD/tests/contracts/runtime/fixtures/gateway.yaml" \
-GATEWAY_ENV_FILE="$test_inputs/gateway.env" \
+GATEWAY_SECRETS_FILE="$test_inputs/gateway-secrets.json" \
 DATABASE_PASSWORD_FILE="$test_inputs/database-password" \
 docker --context "$test_context" compose --project-directory "$PWD" \
   -f runtime/compose.local.yaml -p "$test_project" down --volumes --timeout 10

@@ -1,4 +1,35 @@
 # Synthetic provider values only. No OCI requests or real account identifiers.
+mock_data "oci_identity_availability_domains" {
+  defaults = { availability_domains = [{ name = "synthetic:US-ASHBURN-AD-1" }] }
+}
+
+mock_data "oci_core_images" {
+  defaults = { images = [{ id = "ocid1.image.oc1.iad.synthetic" }] }
+}
+
+mock_data "oci_core_private_ips" {
+  defaults = { private_ips = [{ id = "ocid1.privateip.oc1.iad.synthetic", is_primary = true, ip_address = "10.42.0.2" }] }
+}
+
+mock_resource "oci_core_instance" {
+  defaults = { id = "ocid1.instance.oc1.iad.synthetic", private_ip = "10.42.0.2" }
+}
+
+mock_resource "oci_core_vcn" {
+  defaults = { id = "ocid1.vcn.oc1.iad.synthetic" }
+}
+mock_resource "oci_core_subnet" {
+  defaults = { id = "ocid1.subnet.oc1.iad.synthetic" }
+}
+mock_resource "oci_core_security_list" {
+  defaults = { id = "ocid1.securitylist.oc1.iad.synthetic" }
+}
+mock_resource "oci_core_route_table" {
+  defaults = { id = "ocid1.routetable.oc1.iad.synthetic" }
+}
+mock_resource "oci_core_internet_gateway" {
+  defaults = { id = "ocid1.internetgateway.oc1.iad.synthetic" }
+}
 mock_data "oci_identity_region_subscriptions" {
   defaults = {
     region_subscriptions = [

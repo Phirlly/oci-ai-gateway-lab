@@ -1,0 +1,84 @@
+name: Validate
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+jobs:
+  behavior:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+          check-latest: false
+      - name: Unit and process contracts
+        run: |
+          python -m unittest discover -s tests/unit -t . -v
+          python -m unittest discover -s tests/contracts/deployment -t . -v
+          python -m unittest discover -s tests/contracts/http -t . -v
+          python -m compileall -q deployment runtime demo tests
+          git diff --check
+      - name: Validate workflow syntax
+        run: |
+          mkdir -p .cache/actionlint
+          curl --fail --location --max-time 60 --output .cache/actionlint/release.tar.gz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  .cache/actionlint/release.tar.gz' | sha256sum --check
+          tar -xzf .cache/actionlint/release.tar.gz -C .cache/actionlint actionlint
+          .cache/actionlint/actionlint -color
+
+  terraform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform: ['1.5.7', '1.16.4']
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ matrix.terraform }}
+          terraform_wrapper: false
+      - name: Validate deployment compatibility
+        run: |
+          terraform -chdir=infra fmt -check -recursive
+          terraform -chdir=infra init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra validate
+      - name: Offline infrastructure plans
+        if: matrix.terraform == '1.16.4'
+        run: terraform -chdir=infra test
+      - name: Portable Resource Manager archives
+        if: matrix.terraform == '1.5.7'
+        env:
+          GATEWAY_TERRAFORM_15: terraform
+        run: python -m unittest tests.contracts.packaging.test_portable -v
+
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+      - name: Pinned runtime and presenter contracts
+        run: python -m tests.contracts.runtime
+      - name: OCI-compatible and Anthropic adapter contracts
+        run: python -m tests.contracts.demo

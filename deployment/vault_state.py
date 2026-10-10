@@ -7,7 +7,7 @@ from types import MappingProxyType
 
 from .credential_errors import DeliveryError
 from .credential_identity import valid_identity, valid_ocid
-from .credential_records import CredentialRecord, parse_record
+from .credential_records import MAX_RECORD_BYTES, CredentialRecord, parse_record
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,8 @@ def _stages(value):
     return isinstance(value, list) and bool(value) and all(isinstance(item, str) for item in value)
 
 
-def read_version(client, target, now, *, number=None, name=None):
+def read_version_content(client, target, *, number=None, name=None):
+    """Validate the envelope only; callers own record purpose and expiry rules."""
     response = client.bundle(target.secret_id, version_number=number, version_name=name)
     try:
         data = response["data"]
@@ -67,6 +68,16 @@ def read_version(client, target, now, *, number=None, name=None):
         ):
             raise ValueError("Version metadata")
         content = base64.b64decode(encoded["content"], validate=True)
+        if len(content) > MAX_RECORD_BYTES:
+            raise ValueError('Content exceeds supported record size')
+        return version_number, version_name, tuple(stages), content
+    except (KeyError, TypeError, ValueError, binascii.Error):
+        raise DeliveryError("Secret version identity or content could not be verified.") from None
+
+
+def read_version(client, target, now, *, number=None, name=None):
+    version_number, version_name, stages, content = read_version_content(client, target, number=number, name=name)
+    try:
         if content == b"UNCONFIGURED":
             if version_name != "unconfigured" or version_number != 1:
                 raise ValueError("Placeholder")
@@ -81,7 +92,7 @@ def read_version(client, target, now, *, number=None, name=None):
         raise DeliveryError("Secret version identity or content could not be verified.") from None
 
 
-def read_current(client, target, now):
+def read_secret_metadata(client, target):
     response = client.metadata(target.secret_id)
     try:
         data = response["data"]
@@ -101,6 +112,11 @@ def read_current(client, target, now):
         number = data["current-version-number"]
     except (KeyError, TypeError, ValueError):
         raise DeliveryError("Owned ACTIVE secret metadata could not be verified.") from None
+    return etag, number
+
+
+def read_current(client, target, now):
+    etag, number = read_secret_metadata(client, target)
     # The version is selected by this metadata snapshot, not a second CURRENT read.
     version = read_version(client, target, now, number=number)
     if "CURRENT" not in version.stages:
@@ -150,6 +166,7 @@ def read_staged(client, target, now):
         raise DeliveryError("Conflicting pending credential records require explicit recovery.")
     runtime = [version for version in versions if version.record.kind == "runtime-bundle"]
     intent = [version for version in versions if version.record.kind == "creation-intent"]
-    if runtime and (not intent or runtime[0].record.expires_at != intent[0].record.expires_at):
+    if runtime and (not intent or runtime[0].record.expires_at != intent[0].record.expires_at
+                    or runtime[0].record.runtime_context != intent[0].record.runtime_context):
         raise DeliveryError("Pending runtime credentials require a matching durable intent.")
     return versions

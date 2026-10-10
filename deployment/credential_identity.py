@@ -13,7 +13,7 @@ OCID_TYPES = {
 
 
 def valid_ocid(value, resource):
-    region = "" if resource in {"tenancy", "compartment"} else "[a-z0-9-]+"
+    region = "" if resource in {"tenancy", "compartment", "user"} else "[a-z0-9-]+"
     pattern = rf"ocid1\.{resource}\.oc1\.{region}\.[a-zA-Z0-9._-]+"
     return isinstance(value, str) and re.fullmatch(pattern, value) is not None
 

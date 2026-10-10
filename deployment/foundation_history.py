@@ -11,6 +11,8 @@ def recover_base(client, journal, target, package, stack_id):
     """Historical base success is identity evidence, never permission evidence."""
     scope = submission_scope(client, journal, target, package)
     intents = journal.read(scope)
+    if any(intent.kind in ('cleanup-start', 'cleanup-complete') for intent in intents):
+        raise DeliveryError('Cleanup is recorded; credential preparation must stop.')
     if any(intent.kind == 'destroy' for intent in intents):
         raise DeliveryError('Destroy is recorded; credential preparation must stop.')
     response = client.get_stack(stack_id)

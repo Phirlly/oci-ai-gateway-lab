@@ -10,11 +10,23 @@ mock_provider "oci" {
 }
 
 variables {
-  tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaaexampletenancy"
-  compartment_ocid = "ocid1.compartment.oc1..aaaaaaaaexamplecompartment"
-  region           = "us-ashburn-1"
-  deployment_id    = "gateway-test"
-  oci_model_id     = "example.chat-model"
+  schema_version             = 2
+  inference_region           = "us-ashburn-1"
+  external_provider          = "anthropic"
+  external_model_id          = "synthetic-external"
+  presenter_email            = "presenter@example.invalid"
+  instance_shape             = "VM.Standard.E4.Flex"
+  instance_ocpus             = 1
+  instance_memory_gbs        = 8
+  boot_volume_size_gbs       = 50
+  availability_domain_number = 1
+  image_name                 = "Canonical-Ubuntu-24.04-2026.09.18-0"
+  model_key_ttl_days         = 7
+  tenancy_ocid               = "ocid1.tenancy.oc1..aaaaaaaaexampletenancy"
+  compartment_ocid           = "ocid1.compartment.oc1..aaaaaaaaexamplecompartment"
+  region                     = "us-ashburn-1"
+  deployment_id              = "gateway-test"
+  oci_model_id               = "example.chat-model"
 }
 
 run "discover_home_independently_of_hosting_region" {

@@ -17,6 +17,8 @@ def ensure_apply(client, journal, target, package, stack_id, *, model_key_ocid, 
     scope = submission_scope(client, journal, target, package)
     variables = target.config.orm_variables(model_key_ocid=model_key_ocid)
     intents = journal.read(scope)
+    if any(intent.kind in ('cleanup-start', 'cleanup-complete') for intent in intents):
+        raise DeliveryError('Cleanup is recorded; this deployment cannot submit another Apply.')
     if any(intent.kind == 'destroy' for intent in intents):
         raise DeliveryError('Destroy is recorded; this deployment cannot submit another Apply.')
     if (not valid_ocid(stack_id, 'ormstack')

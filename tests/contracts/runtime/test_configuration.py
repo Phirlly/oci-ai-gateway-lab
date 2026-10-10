@@ -26,6 +26,9 @@ class ConfigurationContracts(unittest.TestCase):
         )
         config = json.loads(result.stdout)
         services = config["services"]
+        self.assertEqual(services["gateway"]["entrypoint"], ["python3", "-m", "runtime.gateway_entrypoint"])
+        self.assertNotIn("DATABASE_URL", services["gateway"]["environment"])
+        self.assertNotIn("LITELLM_MASTER_KEY", services["gateway"]["environment"])
         for name in ("gateway", "database"):
             self.assertFalse("ports" in services[name], f"{name} must not publish ports")
             self.assertEqual(set(services[name]["networks"]), {"default"})

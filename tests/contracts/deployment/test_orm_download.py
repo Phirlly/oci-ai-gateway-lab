@@ -20,6 +20,9 @@ class ORMDownloadContracts(unittest.TestCase):
     def test_raw_binary_is_preserved(self):
         self.assertEqual(self.client('binary').get_job_package(JOB_ID), b'PK\x00\xffsynthetic')
 
+    def test_exact_job_state_uses_separate_command_without_printing_content(self):
+        self.assertEqual(self.client('state').get_job_state(JOB_ID), b'{"version":4,"resources":[]}')
+
     def test_timeout_oversize_and_errors_are_sanitized(self):
         for mode in ('timeout', 'large', 'failure'):
             with self.subTest(mode=mode):

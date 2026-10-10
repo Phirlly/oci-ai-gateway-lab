@@ -22,6 +22,9 @@ elif mode == 'failure':
     print('secret-sentinel', file=sys.stderr)
     raise SystemExit(4)
 else:
-    assert request == {'jobId': 'ocid1.ormjob.oc1.iad.synthetic'}
+    kind = "stack" if mode == "stack" else "job"
+    assert request == {kind + "Id": "ocid1.orm" + kind + ".oc1.iad.synthetic"}
+    suffix = "-tf-state" if mode == "state" else "-tf-config"
+    assert ["resource-manager", kind, "get-" + kind + suffix] == sys.argv[-7:-4]
     assert sys.argv[-4:] == ['--file', '-', '--from-json', 'file:///dev/stdin']
-    sys.stdout.buffer.write(b'PK\x00\xffsynthetic')
+    sys.stdout.buffer.write(b'{"version":4,"resources":[]}' if mode == 'state' else b'PK\x00\xffsynthetic')

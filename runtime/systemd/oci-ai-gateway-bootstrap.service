@@ -1,0 +1,16 @@
+[Unit]
+Description=Initialize the OCI AI Gateway demonstration
+After=network-online.target cloud-final.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/oci-ai-gateway
+ExecStart=/usr/bin/python3 -m runtime.bootstrap
+TimeoutStartSec=30min
+KillMode=control-group
+UMask=0077
+StateDirectory=oci-ai-gateway
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal

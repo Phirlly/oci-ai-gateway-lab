@@ -1,0 +1,11 @@
+[Unit]
+Description=Resume OCI AI Gateway initialization until completed
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=oci-ai-gateway-bootstrap.service
+
+[Install]
+WantedBy=timers.target

@@ -1,5 +1,6 @@
 """Own only one disposable Compose project's inputs and lifecycle."""
 
+import json
 import os
 import secrets
 import shutil
@@ -70,16 +71,17 @@ class GatewayStack:
         salt = secrets.token_hex(32)
         password_file = self.directory / "database-password"
         password_file.write_text(database_password)
-        environment_file = self.directory / "gateway.env"
-        environment_file.write_text(
-            f"DATABASE_URL=postgresql://gateway:{database_password}@database:5432/gateway\n"
-            f"LITELLM_MASTER_KEY={master_key}\nLITELLM_SALT_KEY={salt}\n"
-        )
+        environment_file = self.directory / "gateway-secrets.json"
+        environment_file.write_text(json.dumps({
+            "database_password": database_password, "gateway_master_key": master_key,
+            "gateway_salt_key": salt, "oci_api_key": "synthetic-unused",
+            "external_api_key": "synthetic-unused",
+        }))
         for path in (password_file, environment_file):
             path.chmod(0o600)
         self.set_environment({
             "GATEWAY_CONFIG_FILE": str(Path(__file__).parent / "fixtures" / "gateway.yaml"),
-            "GATEWAY_ENV_FILE": str(environment_file),
+            "GATEWAY_SECRETS_FILE": str(environment_file),
             "DATABASE_PASSWORD_FILE": str(password_file),
             "GATEWAY_TEST_MASTER_KEY": master_key,
             "GATEWAY_TEST_PROJECT": self.project,
@@ -87,7 +89,7 @@ class GatewayStack:
         return self
 
     def start(self):
-        command = compose_command(self.project)
+        command = self.command()
         run_command(command + ["config", "--quiet"])
         self.started = True  # Ensure cleanup even when pull/start fails.
         print("Pulling pinned runtime images...", flush=True)
@@ -105,6 +107,9 @@ class GatewayStack:
         if internal != "true":
             raise RuntimeError("Contract network does not enforce internal routing")
         self.wait_for_edge()
+
+    def command(self):
+        return compose_command(self.project)
 
     def wait_for_edge(self):
         client = GatewayClient()
@@ -124,7 +129,7 @@ class GatewayStack:
         cleanup_complete = False
         try:
             if self.started:
-                run_command(compose_command(self.project) + [
+                run_command(self.command() + [
                     "down", "--volumes", "--timeout", "10",
                 ], timeout=90)
                 label = "label=com.docker.compose.project=" + self.project
