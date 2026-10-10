@@ -3,11 +3,12 @@
 import json
 
 from runtime.gateway_http import GatewayError
+from .response_errors import ModelRouteError
 
 
 def _attributed(response, model):
     if response.status != 200:
-        raise GatewayError(f"Model route returned HTTP {response.status}")
+        raise ModelRouteError(response)
     if response.headers.get("x-litellm-model-id") != model:
         raise GatewayError("Model route attribution is missing or does not match")
 

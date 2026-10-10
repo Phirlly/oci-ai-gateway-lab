@@ -6,6 +6,7 @@ from runtime.gateway_http import GatewayError, GatewayHTTP
 from runtime.presenter_api import presenter_session
 
 from .results import completion, streamed_completion
+from .response_errors import ModelRouteError
 from .samples import CATEGORIES, load_samples, request_body
 
 
@@ -51,7 +52,7 @@ def presenter_client(public, presenter, password):
 def _sample(client, sample, model, stream):
     result = {"model": model, "sample": sample.identifier, "stream": stream,
               "expected": sample.expected, "category": None, "usage": None,
-              "cost_usd": None, "status": "ERROR", "error": None}
+              "cost_usd": None, "status": "ERROR", "error": None, "error_details": None}
     started = time.monotonic()
     try:
         response = client.request("POST", "/chat/completions", request_body(sample, model, stream=stream), timeout=90)
@@ -59,6 +60,8 @@ def _sample(client, sample, model, stream):
         category = answer.upper()
         result.update(category=category if category in CATEGORIES else "INVALID_CATEGORY", usage=usage,
                       status="PASS" if category == sample.expected else "FAIL")
+    except ModelRouteError as error:
+        result.update(error=str(error), error_details=error.details)
     except GatewayError as error:
         # Owned errors contain categories/status only, never upstream response bodies.
         result["error"] = str(error)

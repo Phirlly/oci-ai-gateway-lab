@@ -69,6 +69,9 @@ and `external-anthropic`, then use [the presenter script](demo/PROMPT.md).
 using the current presenter password. A failed check reports not ready; it does
 not silently retry model calls. Inspect the workflow and Resource Manager job
 status before rerunning the same action after an interruption.
+For HTTP429, sample results include a recognized error type and bounded numeric
+retry guidance when available. These diagnostics omit raw errors and do not
+automatically identify the cause or retry the request.
 
 Vault reads wait briefly for new versions and in-progress updates. A confirmed
 ETag rejection of credential staging permits up to three attempts, each after
