@@ -101,6 +101,8 @@ may remain. The supplied compartment, OCI identity and Anthropic account/key are
 preserved. Keep recovery records until cleanup is confirmed. If deletion evidence
 is ambiguous after an interruption, automation stops for reconciliation instead
 of reporting success.
+Resume interrupted removal with the current controller; do not downgrade it
+after cleanup has started.
 
 This single-VM demonstration does not provide high availability, automated
 credential rotation or production backup/restore.
