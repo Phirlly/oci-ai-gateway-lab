@@ -2,10 +2,11 @@
 
 import base64
 import binascii
+import time
 from dataclasses import dataclass
 from types import MappingProxyType
 
-from .credential_errors import DeliveryError
+from .credential_errors import DeliveryError, VaultReadError
 from .credential_identity import valid_identity, valid_ocid
 from .credential_records import MAX_RECORD_BYTES, CredentialRecord, parse_record
 
@@ -92,8 +93,7 @@ def read_version(client, target, now, *, number=None, name=None):
         raise DeliveryError("Secret version identity or content could not be verified.") from None
 
 
-def read_secret_metadata(client, target):
-    response = client.metadata(target.secret_id)
+def _owned_metadata(response, target):
     try:
         data = response["data"]
         etag = response["etag"]
@@ -102,7 +102,7 @@ def read_secret_metadata(client, target):
             data["id"] != target.secret_id
             or data["compartment-id"] != target.identity["compartment_ocid"]
             or data["vault-id"] != target.vault_ocid or data["key-id"] != target.key_ocid
-            or data["lifecycle-state"] != "ACTIVE"
+            or data["lifecycle-state"] not in ("ACTIVE", "UPDATING")
             or tags["solution"] != "oci-ai-gateway-lab"
             or tags["deployment_id"] != target.identity["deployment_id"]
             or not isinstance(etag, str) or not etag
@@ -111,8 +111,24 @@ def read_secret_metadata(client, target):
             raise ValueError("Ownership")
         number = data["current-version-number"]
     except (KeyError, TypeError, ValueError):
-        raise DeliveryError("Owned ACTIVE secret metadata could not be verified.") from None
-    return etag, number
+        raise DeliveryError("Owned secret metadata could not be verified.") from None
+    return data["lifecycle-state"], etag, number
+
+
+def read_secret_metadata(client, target):
+    """Wait for owned updates using one budget for transport and readiness."""
+    for delay in (2, 4, 8, 16, 30, None):
+        try:
+            response = client.metadata(target.secret_id)
+        except VaultReadError:
+            pass
+        else:
+            state, etag, number = _owned_metadata(response, target)
+            if state == "ACTIVE":
+                return etag, number
+        if delay is not None:
+            time.sleep(delay)
+    raise VaultReadError("Owned secret readiness could not be verified after bounded reads.") from None
 
 
 def read_current(client, target, now):
