@@ -34,11 +34,19 @@ def staging_etag_rejected(stderr, content):
         message = json.loads(stderr[len('ServiceError:\n'):]).get('message')
         if not isinstance(message, str):
             return False
-        match = re.fullmatch(
-            re.escape(f'Entity Secret with ID {secret} has a computed tag of ')
-            + r'([!-~]{1,256})'
-            + re.escape(f', but is passed a tag of {etag}'), message,
-        )
-        return match is not None and match[1] != etag
+        message_tags = [etag]
+        # Vault's conflict message can omit this verified --gzip suffix.
+        # Match that representation only; never modify the outgoing If-Match.
+        if re.fullmatch(r'[a-fA-F0-9]{64}--gzip', etag):
+            message_tags.append(etag[:-6])
+        for reported in message_tags:
+            match = re.fullmatch(
+                re.escape(f'Entity Secret with ID {secret} has a computed tag of ')
+                + r'([!-~]{1,256})'
+                + re.escape(f', but is passed a tag of {reported}'), message,
+            )
+            if match is not None and match[1] not in message_tags:
+                return True
+        return False
     except (ValueError, TypeError, RecursionError):
         return False

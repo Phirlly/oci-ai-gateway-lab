@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -22,21 +23,24 @@ class VaultETagTransportContracts(unittest.TestCase):
         return VaultCLI('us-ashburn-1', command=(sys.executable, str(FIXTURE), mode), **options)
 
     def test_confirmed_rejection_is_classified_without_transport_replay_or_disclosure(self):
-        for mode, status, code in (('conflict', 409, 'Conflict'), ('precondition', 412, 'NoEtagMatch')):
+        for mode, status, code in (('conflict', 409, 'Conflict'), ('precondition', 412, 'NoEtagMatch'),
+                                   ('gzip-tag', 409, 'Conflict')):
             stdout, stderr = io.StringIO(), io.StringIO()
+            tag = 'a' * 64 + '--gzip' if mode == 'gzip-tag' else 'older'
             with self.subTest(mode=mode), patch('deployment.oci_cli.subprocess.run', wraps=subprocess.run) as run:
                 client = self.connection(mode)
                 run.reset_mock()
                 with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     with self.assertRaises(DeliveryError) as error:
-                        client.stage(SECRET, VERSION, b'secret-sentinel', 'older')
+                        client.stage(SECRET, VERSION, b'secret-sentinel', tag)
                 self.assertEqual(run.call_count, 1)
+                self.assertEqual(json.loads(run.call_args.kwargs['input'])['ifMatch'], tag)
                 self.assertEqual(type(error.exception).__name__, 'VaultETagConflict')
                 self.assertNotIsInstance(error.exception, MutationUncertain)
                 self.assertEqual(stdout.getvalue(), '')
                 self.assertEqual(stderr.getvalue(), f'OCI service response: HTTP {status}; code {code}.\n')
                 trace = ''.join(traceback.format_exception(error.exception))
-                for private in ('sentinel', SECRET, 'older', 'newer'):
+                for private in ('sentinel', SECRET, tag, 'newer'):
                     self.assertNotIn(private, trace)
 
     def test_unconfirmed_or_timed_out_rejections_remain_uncertain(self):

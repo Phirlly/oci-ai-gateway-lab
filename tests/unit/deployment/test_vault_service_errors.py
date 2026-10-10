@@ -25,6 +25,25 @@ class VaultServiceErrorTests(unittest.TestCase):
         self.assertTrue(staging_etag_rejected(error(status=412, code='NoEtagMatch'), request()))
         self.assertTrue(staging_etag_rejected(error(), request(secretContentName='intent-' + 'a' * 32)))
 
+    def test_reported_hex_tag_matches_the_verified_gzip_response_representation(self):
+        tag = 'a' * 64
+        message = MESSAGE.replace('older', tag).replace('newer', 'b' * 64)
+        self.assertTrue(staging_etag_rejected(error(message=message), request(ifMatch=tag + '--gzip')))
+        self.assertTrue(staging_etag_rejected(error(message=message + '--gzip'), request(ifMatch=tag + '--gzip')))
+
+    def test_other_suffixes_or_equal_tag_representations_do_not_authorize_retry(self):
+        tag = 'a' * 64
+        message = MESSAGE.replace('older', tag).replace('newer', 'b' * 64)
+        for supplied in (tag + '--br', tag + '--GZIP', tag + '--gzip--gzip'):
+            with self.subTest(supplied=supplied):
+                self.assertFalse(staging_etag_rejected(error(message=message), request(ifMatch=supplied)))
+        self.assertFalse(staging_etag_rejected(error(), request(ifMatch='older--gzip')))
+        for computed in (tag, tag + '--gzip'):
+            for reported in (tag, tag + '--gzip'):
+                with self.subTest(computed=computed, reported=reported):
+                    equal = MESSAGE.replace('older', reported).replace('newer', computed)
+                    self.assertFalse(staging_etag_rejected(error(message=equal), request(ifMatch=tag + '--gzip')))
+
     def test_unrelated_conflicts_and_mismatched_identity_or_tags_are_uncertain(self):
         for message in ('generic conflict', MESSAGE.replace(SECRET, SECRET + 'other'),
                         MESSAGE.replace('older', 'other'), MESSAGE.replace('newer', 'older'),
