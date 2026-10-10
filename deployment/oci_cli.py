@@ -4,8 +4,10 @@ import json
 import math
 import os
 import subprocess
+import sys
 
 from .credential_errors import CloudReadError, DeliveryError, MutationUncertain
+from .oci_service_errors import service_error_summary
 
 _ENVIRONMENT_KEYS = {
     "HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE",
@@ -51,7 +53,12 @@ class OCICommand:
                 encoding="utf-8", timeout=self.timeout, shell=False,
                 start_new_session=True, env=self.environment,
             )
-            if result.returncode or len(result.stdout) > 1048576:
+            if result.returncode:
+                summary = service_error_summary(result.stderr)
+                if summary is not None:
+                    print(summary, file=sys.stderr, flush=True)
+                raise error("OCI operation could not be verified; reconcile before retry.")
+            if len(result.stdout) > 1048576:
                 raise error("OCI operation could not be verified; reconcile before retry.")
             return result.stdout
         except (OSError, UnicodeError, subprocess.TimeoutExpired):
