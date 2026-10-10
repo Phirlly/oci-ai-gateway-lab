@@ -1,4 +1,4 @@
-# OCI AI Gateway and Model Choice Lab
+# OCI AI Gateway
 
 Compare an OCI-managed model and an external model through an OCI-hosted LiteLLM
 gateway and its bundled Compare UI.

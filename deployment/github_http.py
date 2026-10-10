@@ -71,7 +71,7 @@ class GitHubHTTP:
                 connection.request(method, path, body=content, headers={
                     'Authorization': 'Bearer ' + self._token,
                     'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json',
-                    'X-GitHub-Api-Version': '2026-03-10', 'User-Agent': 'oci-ai-gateway-lab',
+                    'X-GitHub-Api-Version': '2026-03-10', 'User-Agent': 'oci-ai-gateway',
                 })
                 response = connection.getresponse()
                 if response.status != expected:
