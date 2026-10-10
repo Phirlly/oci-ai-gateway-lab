@@ -1,0 +1,30 @@
+services:
+  provider:
+    image: ghcr.io/berriai/litellm@sha256:625981c83410a3ea68eb0697590a57ec1d764d634514d54fa5db0591077ee839
+    entrypoint: ["python3", "/fixtures/provider_server.py"]
+    volumes:
+      - type: bind
+        source: ./tests/contracts/demo/provider_server.py
+        target: /fixtures/provider_server.py
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/ready', timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+  gateway:
+    volumes:
+      - type: bind
+        source: ./demo
+        target: /opt/oci-ai-gateway/demo
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./tests
+        target: /opt/oci-ai-gateway/tests
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      provider: {condition: service_healthy}

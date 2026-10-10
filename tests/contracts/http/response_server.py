@@ -29,6 +29,22 @@ class ResponseHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.drip(b"c\r\ndata: ping\n\n\r\n")
                 self.wfile.write(b"0\r\n\r\n")
+            elif self.path == "/redirect":
+                self.send_response(302)
+                self.send_header("Location", "/normal")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            elif self.path == "/oversized":
+                body = b"s" * 1_000_001
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path == "/incomplete":
+                self.send_response(200)
+                self.send_header("Content-Length", "200")
+                self.end_headers()
+                self.wfile.write(b"secret-synthetic")
             else:
                 body = b'{"ok": true}'
                 self.send_response(403 if self.path == "/denied" else 200)

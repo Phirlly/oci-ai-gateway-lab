@@ -3,6 +3,7 @@
 from .apply_attempts import latest_applies
 from .credential_errors import DeliveryError
 from .foundation_package import FoundationPackage
+from .gateway_config import GatewayConfig
 from .resource_manager_jobs import active_job_id, parse_job
 from .resource_manager_stacks import parse_stack
 from .submission_records import apply_request_hash, destroy_request_hash, digest, target_identity
@@ -13,6 +14,8 @@ def submission_scope(client, journal, target, package):
             or journal.controller_id != target.controller_id
             or not isinstance(package, FoundationPackage)):
         raise DeliveryError('Submission controller, region or package is inconsistent.')
+    if isinstance(target.config, GatewayConfig) != package.is_gateway:
+        raise DeliveryError('Deployment settings and package format must both be legacy foundation or full gateway.')
     return target_identity(target.config)
 
 

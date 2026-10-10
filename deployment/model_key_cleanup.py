@@ -20,7 +20,7 @@ class KeyCleanupObservation:
         return 'KEYS_REMOVED' if self.removed else 'NO_KEYS_OBSERVED'
 
 
-def _candidates(response, identity):
+def cleanup_candidates(response, identity):
     try:
         data = response['data']
         rows = data['items']
@@ -34,7 +34,7 @@ def _candidates(response, identity):
         raise DeliveryError('Complete model-key cleanup discovery could not be verified.') from None
 
 
-def _exact(client, identity, identifier, expected):
+def exact_cleanup_key(client, identity, identifier, expected):
     response = client.get(identifier)
     try:
         row, etag = response['data'], response['etag']
@@ -55,8 +55,8 @@ def remove_model_keys(client, identity, *, known_key_ids=()):
             or len(known_key_ids) > 256
             or any(not valid_ocid(value, 'generativeaiapikey') for value in known_key_ids)):
         raise DeliveryError('Verified cleanup identity, key IDs and inference region are required.')
-    candidates = _candidates(client.list(identity['compartment_ocid']), identity)
-    snapshots = {identifier: _exact(client, identity, identifier, row)
+    candidates = cleanup_candidates(client.list(identity['compartment_ocid']), identity)
+    snapshots = {identifier: exact_cleanup_key(client, identity, identifier, row)
                  for identifier, row in candidates.items()}
     removed, pending = [], []
     for identifier, (state, etag) in snapshots.items():
@@ -68,7 +68,7 @@ def remove_model_keys(client, identity, *, known_key_ids=()):
                 # The fixed adapter returns only after exact DELETED/404 readback.
                 client.delete(identifier, etag)
             except MutationUncertain:
-                observed, _ = _exact(client, identity, identifier, candidates[identifier])
+                observed, _ = exact_cleanup_key(client, identity, identifier, candidates[identifier])
                 if observed != 'DELETED':
                     pending.append(identifier)
                     continue

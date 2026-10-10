@@ -8,7 +8,7 @@ import unittest
 from .stack import GatewayStack
 from .account_fixture import seed_invitation_creator
 
-SUITES = ("configuration", "health", "onboarding", "access", "persistence")
+SUITES = ("configuration", "cloud_configuration", "health", "onboarding", "access", "persistence", "presenter_bootstrap")
 
 
 def interrupted(signum, frame):
@@ -25,16 +25,18 @@ def main():
     try:
         with GatewayStack() as stack:
             # Configuration assertions execute before any container is started.
-            if "configuration" in selected:
-                suite = unittest.defaultTestLoader.loadTestsFromName(
-                    "tests.contracts.runtime.test_configuration"
-                )
+            config_suites = [name for name in selected if name.endswith("configuration")]
+            if config_suites:
+                suite = unittest.defaultTestLoader.loadTestsFromNames([
+                    "tests.contracts.runtime.test_" + name for name in config_suites
+                ])
                 if not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful():
                     return 1
-            runtime_suites = [name for name in selected if name != "configuration"]
+            runtime_suites = [name for name in selected if name not in config_suites]
             if runtime_suites:
                 stack.start()
-                seed_invitation_creator()
+                if any(name != "presenter_bootstrap" for name in runtime_suites):
+                    seed_invitation_creator()
                 suite = unittest.defaultTestLoader.loadTestsFromNames([
                     "tests.contracts.runtime.test_" + name for name in runtime_suites
                 ])

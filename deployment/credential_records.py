@@ -7,6 +7,7 @@ from datetime import datetime
 
 from .credential_errors import DeliveryError
 from .credential_identity import valid_identity, valid_ocid
+from .runtime_context import valid_runtime_context
 
 MAX_RECORD_BYTES = 16384
 SECRET_FIELDS = {
@@ -23,6 +24,10 @@ class CredentialRecord:
     operation_id: str
     expires_at: datetime
     model_key_ocid: str | None = None
+
+    @property
+    def runtime_context(self):
+        return json.loads(self.content).get("runtime")
 
     @property
     def version_name(self):
@@ -74,8 +79,13 @@ def parse_record(content, identity):
             raise ValueError("Identity")
         if value.get("identity") != identity or type(value.get("schema_version")) is not int:
             raise ValueError("Identity or schema")
-        if value["schema_version"] != 1:
+        if value["schema_version"] not in (1, 2):
             raise ValueError("Schema")
+        fields = BASE_FIELDS
+        if value["schema_version"] == 2:
+            if not valid_runtime_context(value.get("runtime")):
+                raise ValueError("Runtime context")
+            fields = fields | {"runtime"}
         operation = value["operation_id"]
         if not isinstance(operation, str) or not re.fullmatch(r"[a-f0-9]{32}", operation):
             raise ValueError("Operation")
@@ -86,14 +96,14 @@ def parse_record(content, identity):
         kind = value["kind"]
         key_id = None
         if kind == "creation-intent":
-            if set(value) != BASE_FIELDS | {"retry_policy", "request"}:
+            if set(value) != fields | {"retry_policy", "request"}:
                 raise ValueError("Intent fields")
             if value["retry_policy"] != "no-automatic-retry":
                 raise ValueError("Retry policy")
             if value["request"] != intent_request(identity, operation, expiry):
                 raise ValueError("Intent request")
         elif kind == "runtime-bundle":
-            if set(value) != BASE_FIELDS | {"model_key_ocid", "credentials"}:
+            if set(value) != fields | {"model_key_ocid", "credentials"}:
                 raise ValueError("Runtime fields")
             key_id = value["model_key_ocid"]
             credentials = value["credentials"]

@@ -15,3 +15,7 @@ class VaultReadError(CloudReadError):
 
 class MutationUncertain(DeliveryError):
     """The request may have changed remote state; reconcile before another mutation."""
+
+
+class ActivationPending(DeliveryError):
+    """An exactly owned saved key is still in a documented activation state."""

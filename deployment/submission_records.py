@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 
 from .credential_errors import DeliveryError
 
+CLEANUP_KINDS = {'cleanup-start', 'cleanup-complete'}
+
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
@@ -37,7 +39,7 @@ class Intent:
     retry_of: str | None = None
 
     def __post_init__(self):
-        if self.kind not in ('create-stack', 'apply', 'destroy'):
+        if self.kind not in {'create-stack', 'apply', 'destroy'} | CLEANUP_KINDS:
             raise DeliveryError('Unsupported submission operation.')
         for name, value in asdict(self).items():
             if name == 'kind' or (name == 'retry_of' and value is None):
@@ -52,16 +54,18 @@ class Intent:
         fields = asdict(self)
         if self.retry_of is None:
             fields.pop('retry_of')
-        return {'version': 1 if self.retry_of is None else 2, **fields}
+        version = 3 if self.kind in CLEANUP_KINDS else 1 if self.retry_of is None else 2
+        return {'version': version, **fields}
 
     @classmethod
     def parse(cls, payload):
         try:
             if (not isinstance(payload, dict) or type(payload['version']) is not int
-                    or payload['version'] not in (1, 2)):
+                    or payload['version'] not in (1, 2, 3)
+                    or (payload['version'] == 3) != (payload.get('kind') in CLEANUP_KINDS)):
                 raise ValueError
             fields = set(cls.__dataclass_fields__)
-            if payload['version'] == 1:
+            if payload['version'] in (1, 3):
                 fields.remove('retry_of')
             elif payload.get('retry_of') is None:
                 raise ValueError

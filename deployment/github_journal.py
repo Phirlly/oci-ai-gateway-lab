@@ -74,7 +74,8 @@ class GitHubJournal:
         """Never replay a callback for an existing or uncertain persisted intent."""
         prior = self.read(target_hash)
         if retry_of is None and any(
-                i.kind == kind and (kind in ('create-stack', 'destroy') or i.request_hash == request_hash)
+                i.kind == kind and (kind in ('create-stack', 'destroy', 'cleanup-start', 'cleanup-complete')
+                                    or i.request_hash == request_hash)
                 for i in prior):
             raise DeliveryError('Submission is already recorded; recover it before proceeding.')
         intent = Intent(self.controller_id, target_hash, kind, uuid.uuid4().hex,

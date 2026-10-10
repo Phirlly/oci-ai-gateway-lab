@@ -1,1 +1,1 @@
-"""Local test-runtime lifecycle safety."""
+"""Fast runtime behavior tests without containers or cloud access."""

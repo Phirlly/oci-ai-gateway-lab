@@ -1,7 +1,7 @@
 """Fixed Resource Manager reads and journal-controlled submission commands."""
 
 from .oci_cli import OCICommand
-from .resource_manager_download import download_job_package
+from .resource_manager_download import download_job_package, download_job_state, download_stack_package
 
 
 class ResourceManagerCLI(OCICommand):
@@ -38,3 +38,9 @@ class ResourceManagerCLI(OCICommand):
 
     def get_job_package(self, job_id):
         return download_job_package(self, job_id)
+
+    def get_stack_package(self, stack_id):
+        return download_stack_package(self, stack_id)
+
+    def get_job_state(self, job_id):
+        return download_job_state(self, job_id)

@@ -19,7 +19,7 @@ class ModelKeyProvisioner:
         identity = dict(self.delivery.target.identity)
         return owned_candidates(self.keys.list(identity["compartment_ocid"]), identity)
 
-    def _ready(self, receipt):
+    def _ready(self, receipt, runtime_context=None):
         version = read_version(
             self.delivery.client, self.delivery.target, self.delivery.now(),
             number=receipt.version_number,
@@ -32,6 +32,8 @@ class ModelKeyProvisioner:
             or receipt.phase not in version.stages
         ):
             raise DeliveryError("Saved runtime binding changed; reconcile before proceeding.")
+        if version.record.runtime_context != runtime_context:
+            raise DeliveryError("Saved runtime settings differ from the verified VM configuration.")
         parse_model_key(
             self.keys.get(receipt.model_key_ocid), version.record,
             now=self.delivery.now(), expected_key_id=receipt.model_key_ocid,
@@ -43,10 +45,10 @@ class ModelKeyProvisioner:
         return current
 
     def prepare(self, *, external_api_key=None, demo_password=None,
-                expires_at=None, stack_key_ocid=None):
+                expires_at=None, stack_key_ocid=None, runtime_context=None):
         receipt = self.delivery.reconcile(stack_key_ocid)
         if receipt.phase in {"CURRENT", "PENDING"}:
-            return self._ready(receipt)
+            return self._ready(receipt, runtime_context)
         if receipt.phase == "INTENT":
             self._discover()
             raise DeliveryError("A recorded key-creation intent requires explicit recovery; no key was retried.")
@@ -54,13 +56,13 @@ class ModelKeyProvisioner:
             raise DeliveryError("Unexpected credential phase; explicit recovery is required.")
         draft = prepare_credentials(
             dict(self.delivery.target.identity), external_api_key, demo_password,
-            expires_at, now=self.delivery.now(),
+            expires_at, now=self.delivery.now(), runtime_context=runtime_context,
         )
         if self._discover():
             raise DeliveryError("Existing model keys without a runtime bundle require explicit recovery.")
         claim = self.delivery.stage(draft.intent, fresh_intent=True)
         if claim.phase == "CURRENT":
-            return self._ready(claim)
+            return self._ready(claim, runtime_context)
         if claim.phase != "INTENT" or claim.version_name != draft.intent.version_name:
             raise DeliveryError("Fresh creation intent could not be confirmed; recovery is required.")
         # Freshness comes from this invocation AND the confirmed new upload.
@@ -74,4 +76,4 @@ class ModelKeyProvisioner:
         staged = self.delivery.stage(runtime)
         if staged.model_key_ocid != key.key_id or staged.version_name != runtime.version_name:
             raise DeliveryError("Runtime staging conflicts with existing credentials; recovery is required.")
-        return self._ready(staged)
+        return self._ready(staged, runtime_context)

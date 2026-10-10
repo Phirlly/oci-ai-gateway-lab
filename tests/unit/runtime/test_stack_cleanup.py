@@ -26,7 +26,7 @@ class StackCleanupTests(unittest.TestCase):
         with patch.object(stack, "run_command", side_effect=results):
             with self.assertRaises(BaseException) as raised:
                 self.fixture.__exit__(None, None, None)
-        self.assertTrue((self.fixture.directory / "gateway.env").is_file())
+        self.assertTrue((self.fixture.directory / "gateway-secrets.json").is_file())
         self.assertTrue((self.fixture.directory / "database-password").is_file())
         self.assertEqual(os.environ["GATEWAY_TEST_PROJECT"], "caller-project")
         self.assertIsInstance(raised.exception, RuntimeError)

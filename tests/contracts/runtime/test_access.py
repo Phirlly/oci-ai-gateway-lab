@@ -28,6 +28,7 @@ class SessionAccessContracts(unittest.TestCase):
                     "max_tokens": 16,
                 })
                 self.assertEqual(response.status, 200)
+                self.assertEqual(response.headers.get("x-litellm-model-id"), model)
                 self.assertEqual(response.json()["choices"][0]["message"]["content"], expected)
 
     def test_stream_completes_with_fixture_text_and_done_marker(self):
@@ -38,6 +39,7 @@ class SessionAccessContracts(unittest.TestCase):
             "max_tokens": 16,
         })
         self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers.get("x-litellm-model-id"), "local-fixture-a")
         events = [line[6:] for line in response.body.decode().splitlines()
                   if line.startswith("data: ")]
         self.assertEqual(events[-1], "[DONE]")
@@ -73,3 +75,7 @@ class SessionAccessContracts(unittest.TestCase):
         self.assertEqual(
             admin().request("GET", "/user/info?user_id=forbidden-admin").status, 404
         )
+
+    def test_internal_session_cannot_list_all_users(self):
+        self.assertEqual(self.session.request("GET", "/model_group/info").status, 200)
+        self.assertEqual(self.session.request("GET", "/user/list").status, 403)

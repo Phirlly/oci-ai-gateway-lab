@@ -1,0 +1,82 @@
+# Immutable application assets and private inputs are prepared by VM bootstrap.
+services:
+  edge:
+    image: docker.io/library/caddy@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    networks: [frontend]
+    volumes:
+      - type: bind
+        source: ${GATEWAY_STATE_DIR:-/var/lib/oci-ai-gateway}/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind: {create_host_path: false}
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      gateway: {condition: service_healthy}
+
+  gateway:
+    image: ghcr.io/berriai/litellm@sha256:625981c83410a3ea68eb0697590a57ec1d764d634514d54fa5db0591077ee839
+    restart: unless-stopped
+    entrypoint: ["python3", "-m", "runtime.gateway_entrypoint"]
+    command: ["--config=/app/config.json", "--port=4000"]
+    environment:
+      PYTHONPATH: /opt/oci-ai-gateway
+      LITELLM_LOCAL_MODEL_COST_MAP: "True"
+    ports: ["127.0.0.1:4000:4000"]
+    networks: [database, frontend]
+    volumes:
+      - type: bind
+        source: ${GATEWAY_SOURCE_DIR:-/opt/oci-ai-gateway}/runtime
+        target: /opt/oci-ai-gateway/runtime
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${GATEWAY_STATE_DIR:-/var/lib/oci-ai-gateway}/gateway.json
+        target: /app/config.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${GATEWAY_STATE_DIR:-/var/lib/oci-ai-gateway}/gateway-secrets.json
+        target: /run/secrets/gateway.json
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      database: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=5)"]
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 30s
+
+  database:
+    image: docker.io/library/postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    networks: [database]
+    volumes:
+      - type: bind
+        source: ${GATEWAY_STATE_DIR:-/var/lib/oci-ai-gateway}/database-password
+        target: /run/secrets/database_password
+        read_only: true
+        bind: {create_host_path: false}
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "gateway", "-d", "gateway"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  database: {internal: true}
+  frontend:

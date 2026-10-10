@@ -18,12 +18,24 @@ services:
 
   gateway:
     image: ghcr.io/berriai/litellm@sha256:625981c83410a3ea68eb0697590a57ec1d764d634514d54fa5db0591077ee839
+    entrypoint: ["python3", "-m", "runtime.gateway_entrypoint"]
     command: ["--config=/app/config.yaml", "--port=4000"]
-    env_file:
-      - ${GATEWAY_ENV_FILE:?Provide a protected gateway environment file}
     environment:
+      PYTHONPATH: /opt/oci-ai-gateway
       LITELLM_LOCAL_MODEL_COST_MAP: "True"
     volumes:
+      - type: bind
+        source: ./runtime
+        target: /opt/oci-ai-gateway/runtime
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${GATEWAY_SECRETS_FILE:?Provide a protected gateway JSON secret file}
+        target: /run/secrets/gateway.json
+        read_only: true
+        bind:
+          create_host_path: false
       - type: bind
         source: ${GATEWAY_CONFIG_FILE:?Provide an explicit gateway configuration}
         target: /app/config.yaml

@@ -3,7 +3,7 @@
 import unittest
 from copy import deepcopy
 
-from deployment.credential_errors import DeliveryError
+from deployment.credential_errors import ActivationPending, DeliveryError
 from deployment.model_key_state import owned_candidates, parse_model_key
 from .model_key_fixture import key_data
 from .record_fixtures import IDENTITY, KEY_ID, NOW
@@ -56,7 +56,7 @@ class ModelKeyStateTests(unittest.TestCase):
         data["lifecycle-state"] = "CREATING"
         data["keys"][0]["state"] = "INACTIVE"
         parse_model_key({"data": data}, record("creation-intent"), now=NOW, require_secret=True)
-        with self.assertRaises(DeliveryError):
+        with self.assertRaises(ActivationPending):
             parse_model_key({"data": data}, record(), now=NOW, require_active=True)
 
     def test_missing_or_invalid_one_time_secret_is_rejected_without_echo(self):

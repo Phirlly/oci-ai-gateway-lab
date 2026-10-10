@@ -11,8 +11,8 @@ RESOURCE_KINDS = {
 }
 
 
-def vault_target(response, config, stack_id, inference_region):
-    """Caller must verify job success, captured inputs and package first."""
+def resource_ids(response, config, resource_kinds):
+    """Caller must first attest successful job inputs and package contents."""
     try:
         data = response['data']
         rows = data['items']
@@ -28,18 +28,24 @@ def vault_target(response, config, stack_id, inference_region):
                     or not isinstance(row['resource-id'], str) or not row['resource-id']):
                 raise ValueError
             seen.add(address)
-            if address not in RESOURCE_KINDS:
+            if address not in resource_kinds:
                 continue
-            resource_type, ocid_kind = RESOURCE_KINDS[address]
+            resource_type, ocid_kind = resource_kinds[address]
             if (row['resource-type'] != resource_type
                     or not valid_ocid(row['resource-id'], ocid_kind)
                     or row['region'] != config.values['region']):
                 raise ValueError
             found[address] = row['resource-id']
-        if set(found) != set(RESOURCE_KINDS):
+        if set(found) != set(resource_kinds):
             raise ValueError
     except (KeyError, TypeError, ValueError, AttributeError):
         raise DeliveryError('Complete foundation resource identity could not be verified.') from None
+    return found
+
+
+def vault_target(response, config, stack_id, inference_region):
+    """Caller must verify job success, captured inputs and package first."""
+    found = resource_ids(response, config, RESOURCE_KINDS)
     settings = config.values
     identity = {
         'deployment_id': settings['deployment_id'], 'tenancy_ocid': settings['tenancy_ocid'],

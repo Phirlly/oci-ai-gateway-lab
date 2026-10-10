@@ -9,6 +9,8 @@ from types import MappingProxyType
 from .credential_errors import DeliveryError
 from .credential_identity import valid_identity
 from .credential_records import MAX_RECORD_BYTES, CredentialRecord, intent_request, parse_record, valid_secret
+from runtime.password_policy import valid_presenter_password
+from .runtime_context import valid_runtime_context
 
 # Component-supported budgets, not OCI service limits.
 MODEL_KEY_BYTES = 8192
@@ -34,11 +36,17 @@ def _runtime_value(draft, key_id, key):
     return value
 
 
-def prepare_credentials(identity, external_api_key, demo_password, expires_at, *, now):
+def prepare_credentials(identity, external_api_key, demo_password, expires_at, *, now,
+                        runtime_context=None):
     if not valid_identity(identity):
         raise DeliveryError("Invalid deployment identity.")
     if not valid_secret(external_api_key) or not valid_secret(demo_password):
         raise DeliveryError("External key and demo password must be valid nonempty credentials.")
+    if runtime_context is not None:
+        if not valid_runtime_context(runtime_context):
+            raise DeliveryError("Verified VM runtime context is required.")
+        if not valid_presenter_password(demo_password):
+            raise DeliveryError("Presenter password needs 12-256 characters with upper/lowercase, a digit and a symbol.")
     operation = secrets.token_hex(16)
     value = {
         "schema_version": 1, "kind": "creation-intent", "identity": dict(identity),
@@ -46,6 +54,8 @@ def prepare_credentials(identity, external_api_key, demo_password, expires_at, *
         "retry_policy": "no-automatic-retry",
         "request": intent_request(identity, operation, expires_at),
     }
+    if runtime_context is not None:
+        value.update(schema_version=2, runtime=dict(runtime_context))
     try:
         intent = parse_record(_encoded(value), dict(identity))
         intent.require_unexpired(now)

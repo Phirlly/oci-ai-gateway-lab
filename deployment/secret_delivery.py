@@ -71,7 +71,8 @@ class SecretDelivery:
                 return _receipt(version)
         if record.kind == "runtime-bundle":
             intents = [version for version in pending if version.record.kind == "creation-intent"]
-            if not intents or intents[0].record.expires_at != record.expires_at:
+            if (not intents or intents[0].record.expires_at != record.expires_at
+                    or intents[0].record.runtime_context != record.runtime_context):
                 raise DeliveryError("Runtime delivery requires a matching durable creation intent.")
         elif any(version.record.kind == "runtime-bundle" for version in pending):
             raise DeliveryError("Runtime credentials are already staged; reconcile before proceeding.")
