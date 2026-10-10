@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import time
 
-from .credential_errors import DeliveryError, MutationUncertain
+from .credential_errors import DeliveryError, MutationUncertain, VaultETagConflict
 from .credential_records import parse_record
 from .vault_state import read_current, read_staged, read_version
 
@@ -51,6 +52,17 @@ class SecretDelivery:
         return result
 
     def stage(self, record, *, fresh_intent=False):
+        # Only a positively rejected conditional upload permits another attempt.
+        # Each attempt must repeat all ownership/history checks, not just GET an ETag.
+        for delay in (1, 2, None):
+            try:
+                return self._stage_once(record, fresh_intent=fresh_intent)
+            except VaultETagConflict:
+                if delay is None:
+                    raise DeliveryError('Vault conditional upload remained rejected; reconcile before retry.') from None
+                time.sleep(delay)
+
+    def _stage_once(self, record, *, fresh_intent):
         # Validate again at the boundary; callers cannot forge the dataclass.
         record = parse_record(record.content, dict(self.target.identity))
         if fresh_intent and record.kind != "creation-intent":
@@ -83,7 +95,7 @@ class SecretDelivery:
         except MutationUncertain:
             if fresh_intent:
                 raise DeliveryError("Intent upload is uncertain; no key may be created.") from None
-            # At most one mutation. Exact readback may prove that it committed.
+            # Never retry an uncertain write. Exact readback may prove it committed.
             pass
         version = read_version(
             self.client, self.target, self.now(), name=record.version_name

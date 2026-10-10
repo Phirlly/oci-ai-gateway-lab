@@ -3,8 +3,9 @@
 import base64
 import time
 
-from .credential_errors import VaultReadError
+from .credential_errors import VaultETagConflict, VaultReadError
 from .oci_cli import OCICommand
+from .vault_service_errors import staging_etag_rejected
 
 _COMMANDS = {
     "metadata": ("vault", "secret", "get"),
@@ -18,6 +19,12 @@ _READ_DELAYS = (2, 4, 8, 16, 30)
 
 class VaultCLI(OCICommand):
     read_error = VaultReadError
+
+    def _mutation_failure(self, command, content, stderr):
+        expected = self.command + list(_COMMANDS['stage']) + ['--from-json', 'file:///dev/stdin']
+        if command == expected and staging_etag_rejected(stderr, content):
+            return VaultETagConflict
+        return super()._mutation_failure(command, content, stderr)
 
     def _request(self, operation, payload):
         command = _COMMANDS[operation]
